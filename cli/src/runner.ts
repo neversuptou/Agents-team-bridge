@@ -8,7 +8,7 @@ export function runClaude(a: { cwd: string; prompt: string; settings: object; mc
     "--mcp-config", JSON.stringify(a.mcpConfig), "--strict-mcp-config",
     "--permission-mode", "acceptEdits", "--output-format", "text", "--max-turns", "40"];
   return new Promise<{ ok: boolean; error?: string; output: string }>((resolve) => {
-    const ch = spawn(cmd, args, { cwd: a.cwd, env: process.env, windowsHide: true });
+    const ch = spawn(cmd, args, { cwd: a.cwd, env: process.env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); // stdin закрыт: claude -p иначе ждёт ввода
     let out = "", err = "", settled = false;
     const finish = (r: { ok: boolean; error?: string; output: string }) => { if (!settled) { settled = true; resolve(r); } };
     ch.stdout.on("data", (d) => (out += d));

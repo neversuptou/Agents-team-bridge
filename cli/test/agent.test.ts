@@ -54,6 +54,14 @@ test("задание без проекта: запуск claude с инстру�
   expect(args).toContain("--strict-mcp-config");
 });
 
+test("claude запускается с закрытым stdin (иначе ждёт ввода и падает)", async () => {
+  const { hub } = start({ FAKE_MODE: "stdin" });
+  await until(() => hub.got.some((m) => m.type === "hello"));
+  hub.send({ type: "job", jobId: 11, threadId: 1, project: null });
+  await until(() => hub.got.some((m) => m.type === "finished"));
+  expect(hub.got.find((m) => m.type === "finished")).toEqual({ type: "finished", jobId: 11, ok: true });
+});
+
 test("ошибка claude → finished ok:false с текстом", async () => {
   const { hub } = start({ FAKE_MODE: "fail" });
   await until(() => hub.got.some((m) => m.type === "hello"));
