@@ -1,0 +1,22 @@
+name: teambridge
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tb
+      POSTGRES_PASSWORD: "${TB_DB_PASSWORD}"
+      POSTGRES_DB: tb
+    volumes: [pgdata:/var/lib/postgresql/data]
+  hub:
+    build: { context: .., dockerfile: hub/Dockerfile }
+    restart: unless-stopped
+    depends_on: [postgres]
+    environment:
+      TB_DATABASE_URL: "postgres://tb:${TB_DB_PASSWORD}@postgres:5432/tb"
+      TB_SALT: "${TB_SALT}"
+      TB_INVITE_CODE: "${TB_INVITE_CODE}"
+      TB_PORT: "8120"
+    ports: ["8120:8120"]
+volumes:
+  pgdata: {}
