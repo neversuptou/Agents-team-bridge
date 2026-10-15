@@ -36,12 +36,12 @@ test("installHook пишет в ~/.claude/settings.json, сохраняя про
   expect(s.hooks.SessionStart).toHaveLength(1);
 });
 
-test("автозапуск: Windows — скрытый запуск через wscript из планировщика", () => {
+test("автозапуск: Windows — скрытый лаунчер в папке «Автозагрузка» (без прав администратора)", () => {
   const w = autostartSpec("win32", self, "C:/Users/u");
-  expect(w.files[0].path).toBe("C:/Users/u/.teambridge/agent.vbs");
+  expect(w.files[0].path).toBe("C:/Users/u/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/teambridge-agent.vbs");
   expect(w.files[0].content).toContain("agent");
   expect(w.files[0].content).toContain(", 0, False");
-  expect(w.commands[0]).toEqual(["schtasks", "/Create", "/F", "/SC", "ONLOGON", "/TN", "TeamBridgeAgent", "/TR", 'wscript.exe "C:/Users/u/.teambridge/agent.vbs"']);
+  expect(w.commands).toEqual([["wscript.exe", w.files[0].path]]);
 });
 
 test("автозапуск: macOS и Linux", () => {

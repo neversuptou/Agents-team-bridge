@@ -57,6 +57,7 @@ export class Agent {
         cwd: ws.cwd,
         prompt: responderPrompt({ shortName: this.shortName, threadId: job.threadId, project: job.project?.name, hub: this.cfg.hub }),
         settings: permissionSettings(),
+        mcpConfig: { mcpServers: { teambridge: { type: "http", url: `${this.cfg.hub}/mcp`, headers: { Authorization: `Bearer ${this.cfg.token}` } } } },
         timeoutMs: this.opts.timeoutMs ?? 15 * 60 * 1000,
         claudeBin: this.opts.claudeBin,
       });

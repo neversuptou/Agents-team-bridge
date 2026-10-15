@@ -24,8 +24,10 @@ program.command("setup").description("Подключить Claude Code к хаб
     installHook(self);
     const spec = autostartSpec(process.platform, self, homedir());
     for (const f of spec.files) { mkdirSync(dirname(f.path), { recursive: true }); writeFileSync(f.path, f.content); }
-    for (const c of spec.commands) spawnSync(c[0], c.slice(1), { stdio: "inherit" });
-    if (process.platform === "win32") spawnSync("schtasks", ["/Run", "/TN", "TeamBridgeAgent"], { stdio: "ignore" });
+    for (const c of spec.commands) {
+      const r = spawnSync(c[0], c.slice(1), { stdio: "inherit" });
+      if (r.error || r.status) console.warn(`Не удалось включить автозапуск (${c.join(" ")}); запускайте вручную: teambridge agent`);
+    }
     console.log("\nГотово. Откройте (или перезапустите) Claude Code и скажите: «Зарегистрируй меня в TeamBridge».");
   });
 

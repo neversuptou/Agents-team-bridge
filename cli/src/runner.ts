@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
 
 // Запуск `claude -p` в рабочей копии с запретами; по таймауту процесс убивается
-export function runClaude(a: { cwd: string; prompt: string; settings: object; timeoutMs: number; claudeBin?: string[] }) {
+export function runClaude(a: { cwd: string; prompt: string; settings: object; mcpConfig: object; timeoutMs: number; claudeBin?: string[] }) {
   const [cmd, ...pre] = a.claudeBin ?? ["claude"];
+  // MCP хаба передаётся явно (со своим токеном) и только он: ответчик не зависит от общих настроек Claude Code
   const args = [...pre, "-p", a.prompt, "--settings", JSON.stringify(a.settings),
+    "--mcp-config", JSON.stringify(a.mcpConfig), "--strict-mcp-config",
     "--permission-mode", "acceptEdits", "--output-format", "text", "--max-turns", "40"];
   return new Promise<{ ok: boolean; error?: string; output: string }>((resolve) => {
     const ch = spawn(cmd, args, { cwd: a.cwd, env: process.env, windowsHide: true });

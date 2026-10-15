@@ -49,6 +49,9 @@ test("задание без проекта: запуск claude с инстру�
   expect(args[1]).toContain("thread_id=9");
   expect(args[1]).toContain("Тест");
   expect(JSON.parse(args[args.indexOf("--settings") + 1]).permissions.deny).toContain("Bash(git merge:*)");
+  const mcp = JSON.parse(args[args.indexOf("--mcp-config") + 1]);
+  expect(mcp.mcpServers.teambridge).toEqual({ type: "http", url: hub.url + "/mcp", headers: { Authorization: "Bearer tb_t" } });
+  expect(args).toContain("--strict-mcp-config");
 });
 
 test("ошибка claude → finished ok:false с текстом", async () => {

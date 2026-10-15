@@ -1,15 +1,15 @@
 import type { SelfCmd } from "./self.js";
 
-export type AutostartSpec = { kind: "schtasks" | "launchd" | "systemd"; files: { path: string; content: string }[]; commands: string[][] };
+export type AutostartSpec = { kind: "startup" | "launchd" | "systemd"; files: { path: string; content: string }[]; commands: string[][] };
 
-// Автозапуск ответчика при входе в систему: Windows — планировщик (скрыто, через wscript), macOS — LaunchAgent, Linux — systemd user
+// Автозапуск ответчика при входе в систему: Windows — папка «Автозагрузка» (скрыто, через wscript), macOS — LaunchAgent, Linux — systemd user
 export function autostartSpec(platform: NodeJS.Platform, self: SelfCmd, home: string): AutostartSpec {
   if (platform === "win32") {
-    const path = `${home}/.teambridge/agent.vbs`;
-    const content = `CreateObject("WScript.Shell").Run """${self.node}"" ""${self.script}"" agent", 0, False\r\n`;
-    return { kind: "schtasks", files: [{ path, content }], commands: [
-      ["schtasks", "/Create", "/F", "/SC", "ONLOGON", "/TN", "TeamBridgeAgent", "/TR", `wscript.exe "${path}"`],
-    ] };
+    // папка «Автозагрузка» пользователя: запуск при входе без прав администратора; wscript прячет окно консоли
+    const path = `${home}/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/teambridge-agent.vbs`;
+    const content = `CreateObject("WScript.Shell").Run """${self.node}"" ""${self.script}"" agent", 0, False
+`;
+    return { kind: "startup", files: [{ path, content }], commands: [["wscript.exe", path]] };
   }
   if (platform === "darwin") {
     const path = `${home}/Library/LaunchAgents/ru.evapps.teambridge.plist`;
