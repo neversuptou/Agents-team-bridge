@@ -39,6 +39,8 @@ export async function buildServer(pool: Pool, cfg: Config) {
     await server.connect(transport);
     await transport.handleRequest(req.raw, reply.raw, req.body);
   });
+  // страница подключения для коллег; код приглашения берётся из ссылки (?code=…), сервер его не хранит
+  app.get("/install", async (_r: any, reply: any) => reply.sendFile("install.html"));
   for (const method of ["get", "delete"]) app[method]("/mcp", async (_r: any, reply: any) => reply.code(405).send({ error: "method_not_allowed" }));
   return app;
 }

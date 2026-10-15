@@ -69,3 +69,9 @@ test("веб-страница отдаётся", async () => {
   expect(r.status).toBe(200);
   expect(await r.text()).toContain("TeamBridge");
 });
+
+test("страница подключения по короткому адресу", async () => {
+  const r = await get("/install?code=abc");
+  expect(r.status).toBe(200);
+  expect(await r.text()).toContain("TeamBridge — подключение");
+});
