@@ -1,0 +1,6 @@
+name: teambridge-test
+services:
+  pg:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: tb, POSTGRES_PASSWORD: tb, POSTGRES_DB: tb_test }
+    ports: ["54399:5432"]
