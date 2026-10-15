@@ -8,6 +8,7 @@ function fill(pkg, sum) {
   document.querySelectorAll(".pkg").forEach((e) => (e.textContent = pkg));
   $("sum").textContent = sum || "не опубликован — спросите админа";
   $("c2").textContent = `curl --cacert teambridge-ca.crt -O ${hub}/${pkg}`;
+  $("c2w").textContent = `curl.exe --ssl-no-revoke --cacert teambridge-ca.crt -O ${hub}/${pkg}`;
   $("c3").textContent = `npm i -g ./${pkg}`;
 }
 

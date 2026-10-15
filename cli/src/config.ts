@@ -17,7 +17,10 @@ export function readConfig(dir = configDir()): CliConfig | null {
 // Права только для владельца: chmod на Unix, ACL без наследования на Windows
 export function ownerOnly(path: string) {
   if (process.platform !== "win32") return chmodSync(path, statSync(path).isDirectory() ? 0o700 : 0o600);
-  spawnSync("icacls", [path, "/inheritance:r", "/grant:r", `${userInfo().username}:F`], { stdio: "ignore" });
+  // папке — с наследованием (OI)(CI), иначе файлы внутри останутся вовсе без прав
+  const who = process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\${userInfo().username}` : userInfo().username;
+  const rights = statSync(path).isDirectory() ? "(OI)(CI)F" : "F";
+  spawnSync("icacls", [path, "/inheritance:r", "/grant:r", `${who}:${rights}`], { stdio: "ignore" });
 }
 
 export function writeConfig(cfg: CliConfig, dir = configDir()) {

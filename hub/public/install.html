@@ -20,17 +20,20 @@
       в канале проекта; коллега сам решает, принять ли запрос, и каждый ответ перед отправкой подтверждает в отдельном окне.
       Информация не о проектах Evapps уходит только после вашего отдельного согласия.</p>
     <p class="muted">Нужно: Node.js 20+, свежий Claude Code (<code>claude update</code>), личное приглашение от админа и отпечаток сертификата, который админ прислал лично.</p>
-    <p class="muted">В Windows PowerShell вместо <code>curl</code> пишите <code>curl.exe</code>.</p>
     <p id="noinvite" class="err" hidden>В ссылке нет приглашения — попросите у админа личную ссылку целиком.</p>
     <ol>
       <li>Скачайте сертификат центра команды и <b>сверьте отпечаток SHA-256</b> с тем, что прислал админ (не совпал — остановитесь и напишите админу):
         <div class="cmd"><pre id="c1"></pre><button data-copy="c1">Копировать</button></div>
+        <div class="os">В Windows PowerShell пишите <code>curl.exe</code> вместо <code>curl</code>.</div>
         <div class="os">Отпечаток — Windows (PowerShell):</div>
         <div class="cmd"><pre id="c1w"></pre><button data-copy="c1w">Копировать</button></div>
         <div class="os">macOS / Linux:</div>
         <div class="cmd"><pre id="c1u"></pre><button data-copy="c1u">Копировать</button></div></li>
       <li>Скачайте пакет (с проверкой сертификата) и сверьте его SHA-256 с опубликованным: <code id="sum">…</code>
+        <div class="os">macOS / Linux:</div>
         <div class="cmd"><pre id="c2"></pre><button data-copy="c2">Копировать</button></div>
+        <div class="os">Windows (у центра команды нет списка отзыва, поэтому --ssl-no-revoke):</div>
+        <div class="cmd"><pre id="c2w"></pre><button data-copy="c2w">Копировать</button></div>
         <div class="os">SHA-256 — Windows: <code>certutil -hashfile <span class="pkg"></span> SHA256</code> · macOS / Linux: <code>shasum -a 256 <span class="pkg"></span></code></div></li>
       <li>Установите:
         <div class="cmd"><pre id="c3"></pre><button data-copy="c3">Копировать</button></div></li>

@@ -15,6 +15,14 @@ test("конфиг: нет файла — null; запись и чтение; т
   if (process.platform !== "win32") expect(statSync(join(dir, "config.json")).mode & 0o077).toBe(0);
 });
 
+test("конфиг от прежней версии (с унаследованными правами) остаётся доступен после перезаписи", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tb-cfg-"));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ hub: "http://old" }));
+  writeConfig({ hub: "https://h:8120", token: "tb_2" }, dir);
+  writeConfig({ hub: "https://h:8120", token: "tb_3" }, dir);
+  expect(readConfig(dir)).toEqual({ hub: "https://h:8120", token: "tb_3" });
+});
+
 test("TEAMBRIDGE_HOME переопределяет папку конфига", () => {
   process.env.TEAMBRIDGE_HOME = "/tmp/tb-x";
   try { expect(configDir()).toBe("/tmp/tb-x"); } finally { delete process.env.TEAMBRIDGE_HOME; }
