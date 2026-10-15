@@ -3,9 +3,13 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY hub/package.json hub/
 COPY cli/package.json cli/
-RUN npm ci -w hub --include-workspace-root=false
+RUN npm ci -w hub -w cli --include-workspace-root=false
 COPY hub hub
-RUN npm run build -w hub && npm prune --omit=dev -w hub
+COPY cli cli
+# пакет teambridge для сотрудников раздаётся самим хабом: /teambridge.tgz
+RUN npm run build -w hub && npm run build -w cli \
+ && cd cli && npm pack --pack-destination ../hub/public && mv ../hub/public/teambridge-*.tgz ../hub/public/teambridge.tgz \
+ && cd .. && npm prune --omit=dev -w hub
 
 FROM node:20-alpine
 WORKDIR /app

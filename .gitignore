@@ -3,3 +3,4 @@ dist/
 .env
 backups/
 .superpowers/
+hub/public/teambridge.tgz

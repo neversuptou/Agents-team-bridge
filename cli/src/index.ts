@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { readConfig, writeConfig, configDir } from "./config.js";
@@ -57,6 +57,11 @@ program.command("status").description("Настройки и профиль").ac
 
 program.command("agent").description("Ответчик: отвечает в TeamBridge от вашего имени (запускается автоматически при входе)")
   .action(async () => {
+    // при автозапуске окна нет — пишем лог в ~/.teambridge/agent.log
+    const logFile = join(configDir(), "agent.log");
+    mkdirSync(configDir(), { recursive: true });
+    const write = console.log;
+    console.log = (...a: unknown[]) => { write(...a); appendFileSync(logFile, a.join(" ") + "\n"); };
     // до регистрации токена нет — ждём, проверяя конфиг раз в минуту
     let cfg = readConfig();
     while (!cfg?.token) {
