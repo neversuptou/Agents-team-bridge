@@ -35,7 +35,7 @@ test("справочник: поиск по имени и подтверждён
 test("проект Evapps — репозиторий на домене evapps.ru и его поддоменах, подделки не проходят", () => {
   for (const r of ["https://gitlab.evapps.ru/mvolkov/fin", "git@gitlab.evapps.ru:mvolkov/fin.git", "ssh://git@git.evapps.ru:2222/x/y.git", "https://evapps.ru/x.git"])
     expect(isOrgRemote(r), r).toBe(true);
-  for (const r of ["https://github.com/neversuptou/Agents-team-bridge.git", "https://gitlab.evapps.ru.evil.com/x", "https://notevapps.ru/x", "https://evil.com/gitlab.evapps.ru/x", undefined, ""])
+  for (const r of ["https://github.com/example/project.git", "https://gitlab.evapps.ru.evil.com/x", "https://notevapps.ru/x", "https://evil.com/gitlab.evapps.ru/x", undefined, ""])
     expect(isOrgRemote(r), String(r)).toBe(false);
 });
 
