@@ -61,3 +61,9 @@ test("конфиг: нет файла — null; запись и чтение", (
   writeConfig({ hub: "http://h", token: "tb_1" }, dir);
   expect(readConfig(dir)).toEqual({ hub: "http://h", token: "tb_1" });
 });
+
+test("TEAMBRIDGE_HOME переопределяет папку конфига (второй ответчик на той же машине)", async () => {
+  const { configDir } = await import("../src/config.js");
+  process.env.TEAMBRIDGE_HOME = "/tmp/tb-x";
+  try { expect(configDir()).toBe("/tmp/tb-x"); } finally { delete process.env.TEAMBRIDGE_HOME; }
+});

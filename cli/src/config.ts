@@ -5,7 +5,8 @@ import { join } from "node:path";
 // ~/.teambridge/config.json: адрес хаба и либо код приглашения (до регистрации), либо токен
 export type CliConfig = { hub: string; token?: string; inviteCode?: string };
 
-export const configDir = (home = homedir()) => join(home, ".teambridge");
+// TEAMBRIDGE_HOME — своя папка конфига (например, второй ответчик на той же машине для проверки)
+export const configDir = (home = homedir()) => process.env.TEAMBRIDGE_HOME ?? join(home, ".teambridge");
 
 export function readConfig(dir = configDir()): CliConfig | null {
   const f = join(dir, "config.json");
