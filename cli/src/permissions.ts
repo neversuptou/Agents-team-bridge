@@ -6,7 +6,7 @@ export function permissionSettings() {
       allow: [
         "Read", "Edit", "Write", "Glob", "Grep", "mcp__teambridge",
         "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git add:*)", "Bash(git commit:*)",
-        "Bash(git checkout -b agent/:*)", "Bash(git push origin agent/:*)", "Bash(git push -u origin agent/:*)",
+        "Bash(git checkout -b agent/*)", "Bash(git push origin agent/*)", "Bash(git push -u origin agent/*)",
         "Bash(glab mr create:*)", "Bash(npm test:*)", "Bash(npm run:*)", "Bash(ls:*)",
       ],
       deny: [

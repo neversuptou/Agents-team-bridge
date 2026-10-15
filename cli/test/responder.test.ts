@@ -12,7 +12,9 @@ test("запреты и разрешения на месте", () => {
   for (const d of ["Bash(git push origin main:*)", "Bash(git push origin master:*)", "Bash(git push origin dev:*)", "Bash(git push --force:*)",
     "Bash(git push -f:*)", "Bash(git merge:*)", "Bash(rm -rf:*)", "Bash(ssh:*)", "Bash(docker:*)",
     "Read(**/.env*)", "Read(**/*.pem)", "Read(**/id_*)", "Read(**/credentials*)"]) expect(p.deny).toContain(d);
-  expect(p.allow).toEqual(expect.arrayContaining(["mcp__teambridge", "Bash(git commit:*)", "Bash(git push origin agent/:*)", "Edit", "Read"]));
+  expect(p.allow).toEqual(expect.arrayContaining(["mcp__teambridge", "Bash(git commit:*)", "Bash(git push origin agent/*)", "Bash(git push -u origin agent/*)", "Edit", "Read"]));
+  // префикс с :* требует пробела после слова и не совпадает с agent/<ветка>
+  expect(p.allow.some((a: string) => a.includes("agent/:*"))).toBe(false);
   expect(p.allow.some((a: string) => /push origin (main|master|dev)/.test(a))).toBe(false);
 });
 
