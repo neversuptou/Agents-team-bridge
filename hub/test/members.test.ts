@@ -1,35 +1,69 @@
 import { beforeEach, afterEach, test, expect } from "vitest";
-import { freshDb, testConfig as cfg } from "./helpers.js";
-import { setInviteCode, register, authenticate, revoke } from "../src/members.js";
+import { freshDb, testConfig as cfg, addMember } from "./helpers.js";
+import { createInvite, register, authenticate, revoke, bootstrapInvite } from "../src/members.js";
 let pool: Awaited<ReturnType<typeof freshDb>>;
-beforeEach(async () => { pool = await freshDb(); await setInviteCode(pool, cfg, "team-code"); });
+beforeEach(async () => { pool = await freshDb(); });
 afterEach(async () => { await pool.end(); });
 
-test("первый — админ, второй — нет; токен работает", async () => {
-  const a = await register(pool, cfg, { inviteCode: "team-code", fullName: "Дмитрий Середа", shortName: "Дмитрий" });
-  const b = await register(pool, cfg, { inviteCode: "team-code", fullName: "Дмитрий Волков", shortName: "Дима" });
-  expect(a.member.isAdmin).toBe(true); expect(b.member.isAdmin).toBe(false);
+test("стартовое приглашение — только пока нет участников, делает админом", async () => {
+  const a = await addMember(pool, "Данила");
+  expect(a.member.isAdmin).toBe(true);
+  expect(await bootstrapInvite(pool, cfg)).toBeNull();
+});
+
+test("приглашение именное и одноразовое; полное имя задаёт админ", async () => {
+  const a = await addMember(pool, "Данила");
+  const { invite } = await createInvite(pool, cfg, a.member.id, { fullName: "Дмитрий Волков" });
+  expect(invite).toMatch(/^tbi_/);
+  const b = await register(pool, cfg, { invite, shortName: "Дима" });
+  expect(b.member).toMatchObject({ fullName: "Дмитрий Волков", shortName: "Дима", isAdmin: false });
   expect((await authenticate(pool, cfg, b.token))?.shortName).toBe("Дима");
+  await expect(register(pool, cfg, { invite, shortName: "Другой" })).rejects.toMatchObject({ code: "invalid_invite" });
 });
-test("неверный код приглашения", async () => {
-  await expect(register(pool, cfg, { inviteCode: "x", fullName: "А", shortName: "а" })).rejects.toMatchObject({ code: "invalid_invite" });
+
+test("просроченное и чужое приглашение не принимается", async () => {
+  const a = await addMember(pool, "Данила");
+  const { invite } = await createInvite(pool, cfg, a.member.id, { fullName: "Б", ttlHours: -1 });
+  await expect(register(pool, cfg, { invite, shortName: "б" })).rejects.toMatchObject({ code: "invalid_invite" });
+  await expect(register(pool, cfg, { invite: "tbi_nope", shortName: "б" })).rejects.toMatchObject({ code: "invalid_invite" });
 });
+
+test("приглашать может только админ", async () => {
+  const a = await addMember(pool, "а");
+  const b = await addMember(pool, "б", a.member);
+  await expect(createInvite(pool, cfg, b.member.id, { fullName: "В" })).rejects.toMatchObject({ code: "forbidden" });
+});
+
 test("занятое короткое имя (без учёта регистра)", async () => {
-  await register(pool, cfg, { inviteCode: "team-code", fullName: "А", shortName: "Дима" });
-  await expect(register(pool, cfg, { inviteCode: "team-code", fullName: "Б", shortName: "дима" })).rejects.toMatchObject({ code: "short_name_taken" });
+  const a = await addMember(pool, "Дима");
+  const { invite } = await createInvite(pool, cfg, a.member.id, { fullName: "Б" });
+  await expect(register(pool, cfg, { invite, shortName: "дима" })).rejects.toMatchObject({ code: "short_name_taken" });
 });
-test("пустое имя", async () => {
-  await expect(register(pool, cfg, { inviteCode: "team-code", fullName: " ", shortName: "а" })).rejects.toMatchObject({ code: "invalid_name" });
+
+test("токен и приглашение хранятся только хэшем", async () => {
+  const a = await addMember(pool, "а");
+  const { invite } = await createInvite(pool, cfg, a.member.id, { fullName: "Б" });
+  expect(JSON.stringify((await pool.query("select * from members")).rows)).not.toContain(a.token);
+  expect(JSON.stringify((await pool.query("select * from invites")).rows)).not.toContain(invite);
 });
-test("токен хранится только хэшем", async () => {
-  const { token } = await register(pool, cfg, { inviteCode: "team-code", fullName: "А", shortName: "а" });
-  const r = await pool.query("select token_hash from members"); expect(r.rows[0].token_hash).not.toContain(token);
-});
-test("отзыв токена: только админ, после — authenticate = null", async () => {
-  const a = await register(pool, cfg, { inviteCode: "team-code", fullName: "А", shortName: "а" });
-  const b = await register(pool, cfg, { inviteCode: "team-code", fullName: "Б", shortName: "б" });
-  await expect(revoke(pool, b.member.id, a.member.id)).rejects.toMatchObject({ code: "forbidden" });
-  await revoke(pool, a.member.id, b.member.id);
+
+test("отзыв: админ — любого кроме себя, участник — только себя", async () => {
+  const a = await addMember(pool, "а");
+  const b = await addMember(pool, "б", a.member);
+  const c = await addMember(pool, "в", a.member);
+  await expect(revoke(pool, b.member, c.member.id)).rejects.toMatchObject({ code: "forbidden" });
+  await expect(revoke(pool, a.member, a.member.id)).rejects.toMatchObject({ code: "forbidden" });
+  await expect(revoke(pool, a.member, NaN)).rejects.toMatchObject({ code: "unknown_member" });
+  await revoke(pool, a.member, b.member.id);
+  await revoke(pool, c.member, c.member.id);
   expect(await authenticate(pool, cfg, b.token)).toBeNull();
+  expect(await authenticate(pool, cfg, c.token)).toBeNull();
 });
-test("неизвестный токен", async () => { expect(await authenticate(pool, cfg, "tb_nope")).toBeNull(); });
+
+test("журнал аудита только на добавление", async () => {
+  await addMember(pool, "а");
+  const n = (await pool.query("select count(*)::int n from audit_log")).rows[0].n;
+  expect(n).toBeGreaterThan(0);
+  await expect(pool.query("delete from audit_log")).rejects.toThrow(/только добавление/);
+  await expect(pool.query("update audit_log set action='x'")).rejects.toThrow(/только добавление/);
+});

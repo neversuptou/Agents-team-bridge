@@ -1,10 +1,26 @@
 {
   "name": "teambridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "bin": { "teambridge": "dist/index.js" },
-  "files": ["dist"],
-  "scripts": { "build": "tsc -p tsconfig.json", "test": "vitest run" },
-  "dependencies": { "commander": "^15.0.0", "ws": "^8.22.0" },
-  "devDependencies": { "@types/node": "^22", "@types/ws": "^8", "typescript": "^5.9.3", "vitest": "^5.0.4" }
+  "bin": {
+    "teambridge": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "commander": "^15.0.0",
+    "undici": "^7.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.4",
+    "zod": "^4.6.7"
+  }
 }

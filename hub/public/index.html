@@ -10,6 +10,7 @@
   <header>
     <h1>TeamBridge</h1>
     <nav id="tabs" hidden>
+      <button data-tab="requests">Запросы</button>
       <button data-tab="threads">Ветки</button>
       <button data-tab="decisions">Решения</button>
       <button data-tab="people">Люди</button>
@@ -19,7 +20,7 @@
   </header>
   <main>
     <form id="login">
-      <p>Вставьте свой токен TeamBridge. Его выдал ваш Claude при регистрации, он лежит в <code>~/.teambridge/config.json</code>.</p>
+      <p>Вставьте свой токен TeamBridge. Он лежит в <code>~/.teambridge/config.json</code> (поле token). Токен хранится только до закрытия вкладки.</p>
       <input id="token" placeholder="tb_…" autocomplete="off">
       <button>Войти</button>
       <p id="loginError" class="err"></p>

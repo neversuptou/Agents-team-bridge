@@ -4,3 +4,7 @@ dist/
 backups/
 .superpowers/
 hub/public/teambridge.tgz
+deploy/tls/
+hub/public/teambridge-*.tgz
+hub/public/SHA256SUMS
+hub/public/ca.crt

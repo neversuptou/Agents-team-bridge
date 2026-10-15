@@ -21,8 +21,15 @@ services:
     environment:
       TB_DATABASE_URL: "postgres://tb:${TB_DB_PASSWORD}@postgres:5432/tb"
       TB_SALT: "${TB_SALT}"
-      TB_INVITE_CODE: "${TB_INVITE_CODE}"
       TB_PORT: "8120"
+      TB_TLS_CERT: /tls/server.crt
+      TB_TLS_KEY: /tls/server.key
+    volumes:
+      - ./tls/server.crt:/tls/server.crt:ro
+      - ./tls/server.key:/tls/server.key:ro
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     ports: ["8120:8120"]
 volumes:
   pgdata: {}

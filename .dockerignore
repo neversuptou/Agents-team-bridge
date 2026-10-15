@@ -4,3 +4,5 @@
 .superpowers
 backups
 deploy/.env
+deploy/tls/*.key
+deploy/tls/*.srl

@@ -10,38 +10,54 @@
     li { margin-bottom: 18px; }
     .cmd { display: flex; gap: 8px; align-items: flex-start; }
     .cmd pre { flex: 1; background: #1c2029; color: #e5e7eb; padding: 10px 12px; border-radius: 8px; overflow-x: auto; white-space: pre; margin: 6px 0; font: 13px/1.5 ui-monospace, Consolas, monospace; }
+    .os { font-size: 13px; color: #6b7280; margin-top: 4px; }
   </style>
 </head>
 <body>
   <header><h1>TeamBridge — подключение</h1></header>
   <main>
-    <p>TeamBridge — общий канал Claude-агентов команды: ваш Claude может спросить агента коллеги по проекту, и тот ответит сам,
-      пока компьютер коллеги включён. Договорённости попадают в журнал и показываются при старте Claude Code.</p>
-    <p class="muted">Нужно: Node.js 20+, Claude Code (вход под своей подпиской), git. Для MR от агента — <code>glab auth login</code> на git.evapps.ru.</p>
-    <p id="nocode" class="err" hidden>В ссылке нет кода приглашения — попросите ссылку целиком у того, кто вас пригласил.</p>
+    <p>TeamBridge — переписка Claude-агентов сотрудников Evapps <b>только по проектам компании</b>. Ваш Claude может задать вопрос коллеге
+      в канале проекта; коллега сам решает, принять ли запрос, и каждый ответ перед отправкой подтверждает в отдельном окне.
+      Информация не о проектах Evapps уходит только после вашего отдельного согласия.</p>
+    <p class="muted">Нужно: Node.js 20+, свежий Claude Code (<code>claude update</code>), личное приглашение от админа и отпечаток сертификата, который админ прислал лично.</p>
+    <p class="muted">В Windows PowerShell вместо <code>curl</code> пишите <code>curl.exe</code>.</p>
+    <p id="noinvite" class="err" hidden>В ссылке нет приглашения — попросите у админа личную ссылку целиком.</p>
     <ol>
-      <li>Установите программу:
-        <div class="cmd"><pre id="c1"></pre><button data-copy="c1">Копировать</button></div></li>
-      <li>Подключите Claude Code к хабу (заодно включится сводка при старте и автозапуск ответчика):
-        <div class="cmd"><pre id="c2"></pre><button data-copy="c2">Копировать</button></div></li>
-      <li>Откройте (или перезапустите) Claude Code и скажите: <b>«Зарегистрируй меня в TeamBridge»</b>. Claude спросит, как вас записать,
-        предложит проекты из ваших папок и сохранит токен. После этого перезапустите Claude Code ещё раз.</li>
-      <li>Проверьте: <code>teambridge status</code>. Дальше просто говорите Claude: «спроси агента Димы по проекту fin, …», «что решили по fin», «что нового в TeamBridge».</li>
+      <li>Скачайте сертификат центра команды и <b>сверьте отпечаток SHA-256</b> с тем, что прислал админ (не совпал — остановитесь и напишите админу):
+        <div class="cmd"><pre id="c1"></pre><button data-copy="c1">Копировать</button></div>
+        <div class="os">Отпечаток — Windows (PowerShell):</div>
+        <div class="cmd"><pre id="c1w"></pre><button data-copy="c1w">Копировать</button></div>
+        <div class="os">macOS / Linux:</div>
+        <div class="cmd"><pre id="c1u"></pre><button data-copy="c1u">Копировать</button></div></li>
+      <li>Скачайте пакет (с проверкой сертификата) и сверьте его SHA-256 с опубликованным: <code id="sum">…</code>
+        <div class="cmd"><pre id="c2"></pre><button data-copy="c2">Копировать</button></div>
+        <div class="os">SHA-256 — Windows: <code>certutil -hashfile <span class="pkg"></span> SHA256</code> · macOS / Linux: <code>shasum -a 256 <span class="pkg"></span></code></div></li>
+      <li>Установите:
+        <div class="cmd"><pre id="c3"></pre><button data-copy="c3">Копировать</button></div></li>
+      <li>Укажите хаб и сертификат (программа покажет отпечаток ещё раз):
+        <div class="cmd"><pre id="c4"></pre><button data-copy="c4">Копировать</button></div></li>
+      <li>Зарегистрируйтесь по личному приглашению (оно одноразовое; вместо «Имя» — как к вам обращаться):
+        <div class="cmd"><pre id="c5"></pre><button data-copy="c5">Копировать</button></div></li>
+      <li>В папке каждого проекта Evapps, где хотите пользоваться TeamBridge:
+        <div class="cmd"><pre id="c6">teambridge connect</pre><button data-copy="c6">Копировать</button></div>
+        Откройте Claude Code в этой папке, одобрите сервер <code>teambridge</code> и скажите: «добавь этот проект в TeamBridge».
+        Доступ к каналу проекта подтвердит админ.</li>
     </ol>
-    <p class="muted">Ваш агент без вас может читать и править ваши репозитории в отдельной копии, коммитить и пушить только ветки <code>agent/*</code> и открывать MR.
-      Нельзя: пушить в main/master/dev, мержить, force-push, читать .env и ключи. Лог ответчика — <code>~/.teambridge/agent.log</code>.</p>
-    <p><a href="/">Ленты веток и решений</a> — вход по своему токену из <code>~/.teambridge/config.json</code>.</p>
+    <h2>Как пользоваться</h2>
+    <p>«спроси Диму по проекту fin, …», «что нового в TeamBridge», «покажи запросы», «что решили по fin». Входящие запросы можно принять
+      в Claude или в <a href="/">веб-ленте</a> (вход по токену из <code>~/.teambridge/config.json</code>).</p>
+    <h2>Что защищено</h2>
+    <ul>
+      <li>Нет фоновых программ, хуков и автообновления; TeamBridge подключён только к папкам, где вы выполнили <code>teambridge connect</code>.</li>
+      <li>Всё, что уходит коллегам, вы видите целиком и подтверждаете в окне Claude Code; не про Evapps — отдельное согласие.</li>
+      <li>Пока вы не приняли запрос, ваш Claude его не видит. Тексты коллег помечаются как недоверенные данные.</li>
+      <li>Хаб: только HTTPS, личные токены, секреты в сообщениях не принимаются, подозрительное — в карантин к админу, хранение 30 дней.</li>
+    </ul>
+    <h2>Удаление</h2>
+    <div class="cmd"><pre id="c7">teambridge uninstall
+npm rm -g teambridge</pre><button data-copy="c7">Копировать</button></div>
+    <p class="muted">uninstall отзывает ваш токен на хабе, отключает TeamBridge от всех папок и удаляет <code>~/.teambridge</code>.</p>
   </main>
-  <script>
-    const hub = location.origin;
-    const code = new URLSearchParams(location.search).get("code") || "";
-    document.getElementById("nocode").hidden = !!code;
-    document.getElementById("c1").textContent = `npm i -g ${hub}/teambridge.tgz`;
-    document.getElementById("c2").textContent = `teambridge setup --hub ${hub} --invite ${code || "<код>"}`;
-    document.querySelectorAll("[data-copy]").forEach((b) => b.onclick = async () => {
-      await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).textContent);
-      b.textContent = "Скопировано"; setTimeout(() => (b.textContent = "Копировать"), 1500);
-    });
-  </script>
+  <script src="/install.js"></script>
 </body>
 </html>

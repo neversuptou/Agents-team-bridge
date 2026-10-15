@@ -1,35 +1,46 @@
 import { beforeEach, afterEach, test, expect } from "vitest";
-import { freshDb, testConfig as cfg } from "./helpers.js";
-import { setInviteCode, register } from "../src/members.js";
-import { setMyProjects, myProjects, directory, projectOwners } from "../src/projects.js";
-let pool: any, me: any, dima: any;
+import { freshDb, addMember } from "./helpers.js";
+import { setMyProjects, myProjects, directory, projectOwners, approveMembership, pendingMemberships, sharesProject } from "../src/projects.js";
+let pool: any, admin: any, dima: any;
 beforeEach(async () => {
-  pool = await freshDb(); await setInviteCode(pool, cfg, "c");
-  me = (await register(pool, cfg, { inviteCode: "c", fullName: "Дмитрий Середа", shortName: "Дмитрий" })).member;
-  dima = (await register(pool, cfg, { inviteCode: "c", fullName: "Дмитрий Волков", shortName: "Дима" })).member;
+  pool = await freshDb();
+  admin = (await addMember(pool, "Данила")).member;
+  dima = (await addMember(pool, "Дима", admin)).member;
 });
 afterEach(async () => { await pool.end(); });
-test("добавить и убрать проекты; имя без учёта регистра", async () => {
-  await setMyProjects(pool, me.id, { add: [{ name: "fin", gitRemote: "git@git.evapps.ru:mvolkov/fin.git", localPath: "D:/fin" }] });
-  await setMyProjects(pool, dima.id, { add: [{ name: "FIN", localPath: "/home/d/fin" }] });
-  expect((await projectOwners(pool, "Fin")).ownerIds.sort()).toEqual([me.id, dima.id].sort());
-  expect(await myProjects(pool, me.id)).toEqual([{ name: "fin", gitRemote: "git@git.evapps.ru:mvolkov/fin.git", localPath: "D:/fin" }]);
-  await setMyProjects(pool, me.id, { remove: ["fin"] });
-  expect(await myProjects(pool, me.id)).toEqual([]);
+
+test("проект участника ждёт подтверждения админа, у админа — сразу", async () => {
+  await setMyProjects(pool, admin, { add: [{ name: "fin", localPath: "D:/fin" }] });
+  await setMyProjects(pool, dima, { add: [{ name: "FIN", localPath: "/home/d/fin" }] });
+  expect(await myProjects(pool, dima.id)).toEqual([{ name: "fin", gitRemote: null, localPath: "/home/d/fin", approved: false }]);
+  expect((await projectOwners(pool, "Fin")).ownerIds).toEqual([admin.id]);
+  expect(await sharesProject(pool, admin.id, dima.id)).toBe(false);
+  expect(await pendingMemberships(pool)).toEqual([{ memberId: dima.id, shortName: "Дима", project: "fin" }]);
+  await expect(approveMembership(pool, dima, dima.id, "fin")).rejects.toMatchObject({ code: "forbidden" });
+  await approveMembership(pool, admin, dima.id, "fin");
+  expect((await projectOwners(pool, "fin")).ownerIds.sort()).toEqual([admin.id, dima.id].sort());
+  expect(await sharesProject(pool, admin.id, dima.id)).toBe(true);
+  await setMyProjects(pool, dima, { remove: ["fin"] });
+  expect(await myProjects(pool, dima.id)).toEqual([]);
 });
-test("directory: поиск по имени и проекту, онлайн", async () => {
-  await setMyProjects(pool, dima.id, { add: [{ name: "fin" }] });
-  const all = await directory(pool, new Set([dima.id]));
-  expect(all.find((e) => e.shortName === "Дима")).toMatchObject({ online: true, projects: ["fin"] });
-  expect((await directory(pool, new Set(), "волков")).map((e) => e.shortName)).toEqual(["Дима"]);
-  expect((await directory(pool, new Set(), "fin")).map((e) => e.shortName)).toEqual(["Дима"]);
+
+test("справочник: поиск по имени и подтверждённому проекту", async () => {
+  await setMyProjects(pool, dima, { add: [{ name: "fin" }] });
+  expect((await directory(pool, "fin")).map((e) => e.shortName)).toEqual([]);
+  await approveMembership(pool, admin, dima.id, "fin");
+  expect((await directory(pool, "fin")).map((e) => e.shortName)).toEqual(["Дима"]);
+  expect((await directory(pool, "дима"))[0]).toEqual({ fullName: "ДИМА", shortName: "Дима", projects: ["fin"] });
 });
+
 test("неизвестный проект", async () => {
   await expect(projectOwners(pool, "nope")).rejects.toMatchObject({ code: "unknown_project" });
 });
+
 test("отозванные не попадают в справочник и во владельцы", async () => {
-  await setMyProjects(pool, dima.id, { add: [{ name: "fin" }] });
+  await setMyProjects(pool, admin, { add: [{ name: "fin" }] });
+  await setMyProjects(pool, dima, { add: [{ name: "fin" }] });
+  await approveMembership(pool, admin, dima.id, "fin");
   await pool.query("update members set revoked_at=now() where id=$1", [dima.id]);
-  expect((await projectOwners(pool, "fin")).ownerIds).toEqual([]);
-  expect((await directory(pool, new Set())).map((e) => e.shortName)).toEqual(["Дмитрий"]);
+  expect((await projectOwners(pool, "fin")).ownerIds).toEqual([admin.id]);
+  expect((await directory(pool)).map((e) => e.shortName)).toEqual(["Данила"]);
 });

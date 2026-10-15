@@ -1,20 +1,26 @@
 import { afterEach, beforeEach, test, expect } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { freshDb, testConfig as cfg } from "./helpers.js";
+import { freshDb, testConfig as cfg, addMember } from "./helpers.js";
 import { buildServer } from "../src/server.js";
-import { setInviteCode } from "../src/members.js";
+import { setMyProjects, approveMembership } from "../src/projects.js";
 
-let app: any, pool: any, base: string;
+let app: any, pool: any, base: string, a: any, b: any;
 beforeEach(async () => {
-  pool = await freshDb(); await setInviteCode(pool, cfg, "c"); app = await buildServer(pool, cfg);
+  pool = await freshDb();
+  a = await addMember(pool, "Данила");
+  b = await addMember(pool, "Дима", a.member);
+  await setMyProjects(pool, a.member, { add: [{ name: "fin", gitRemote: "https://git.evapps.ru/mvolkov/fin.git" }] });
+  await setMyProjects(pool, b.member, { add: [{ name: "fin" }] });
+  await approveMembership(pool, a.member, b.member.id, "fin");
+  app = await buildServer(pool, cfg);
   await app.listen({ port: 0, host: "127.0.0.1" }); base = `http://127.0.0.1:${app.server.address().port}/mcp`;
 });
 afterEach(async () => { await app.close(); await pool.end(); });
 
-async function client(headers: Record<string, string>) {
+async function client(token: string) {
   const c = new Client({ name: "t", version: "1" });
-  await c.connect(new StreamableHTTPClientTransport(new URL(base), { requestInit: { headers } }));
+  await c.connect(new StreamableHTTPClientTransport(new URL(base), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
   return c;
 }
 const call = async (c: Client, name: string, args: any = {}) => {
@@ -27,44 +33,39 @@ const rawPost = (headers: Record<string, string>) => fetch(base, {
   body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
 });
 
-test("регистрация по коду, потом работа по токену", async () => {
-  const anon = await client({ "X-Invite-Code": "c" });
-  expect((await anon.listTools()).tools.map((t) => t.name)).toEqual(["register"]);
-  const reg = await call(anon, "register", { full_name: "Дмитрий Середа", short_name: "Дмитрий", projects: [{ name: "fin", local_path: "D:/fin" }] });
-  expect(reg.data.token).toMatch(/^tb_/);
-  expect(reg.data.next).toContain("teambridge save-token");
-  const me = await client({ Authorization: `Bearer ${reg.data.token}` });
-  expect((await me.listTools()).tools.map((t) => t.name).sort()).toEqual(["ask", "decide", "decisions", "directory", "inbox", "my_projects", "reply", "thread", "whoami"]);
-  expect((await call(me, "whoami")).data).toMatchObject({ shortName: "Дмитрий", isAdmin: true, projects: [{ name: "fin", localPath: "D:/fin" }] });
-});
-
-test("неверный код приглашения — ошибка инструмента", async () => {
-  const anon = await client({ "X-Invite-Code": "wrong" });
-  const r = await call(anon, "register", { full_name: "А", short_name: "а" });
-  expect(r.err).toBe(true);
-  expect(r.data).toContain("Неверный код");
-});
-
-test("без заголовков и с плохим токеном — 401", async () => {
+test("только по токену; регистрации через MCP нет; инструкции про недоверенные данные", async () => {
   expect((await rawPost({})).status).toBe(401);
+  expect((await rawPost({ "x-invite-code": "x" })).status).toBe(401);
   expect((await rawPost({ authorization: "Bearer tb_bad" })).status).toBe(401);
+  const c = await client(a.token);
+  expect((await c.listTools()).tools.map((t) => t.name).sort()).toEqual(
+    ["ask", "decide", "decisions", "directory", "inbox", "my_projects", "reply", "requests", "respond_request", "thread", "whoami"]);
+  expect(c.getInstructions()).toContain("недоверенные данные");
 });
 
-test("переписка через MCP и ошибки как isError", async () => {
-  const anon = await client({ "X-Invite-Code": "c" });
-  const a = (await call(anon, "register", { full_name: "А", short_name: "а" })).data.token;
-  const b = (await call(anon, "register", { full_name: "Б", short_name: "б", projects: [{ name: "fin" }] })).data.token;
-  const ca = await client({ Authorization: `Bearer ${a}` });
-  const cb = await client({ Authorization: `Bearer ${b}` });
-  expect((await call(ca, "directory", { query: "fin" })).data.map((x: any) => x.shortName)).toEqual(["б"]);
-  const t = (await call(ca, "ask", { project: "fin", subject: "тема", text: "вопрос" })).data;
-  expect((await call(cb, "inbox")).data.threads[0].id).toBe(t.threadId);
-  await call(cb, "reply", { thread_id: t.threadId, text: "ответ", actions: [{ kind: "mr", url: "https://git/mr/1" }] });
-  expect((await call(ca, "thread", { thread_id: t.threadId })).data.messages[1].actions[0].kind).toBe("mr");
-  await call(cb, "decide", { thread_id: t.threadId, summary: "решили так" });
-  expect((await call(ca, "decisions", { project: "fin" })).data[0].summary).toBe("решили так");
+test("переписка: запрос → решение получателя → ответ; тексты коллег с меткой", async () => {
+  const ca = await client(a.token), cb = await client(b.token);
+  const t = (await call(ca, "ask", { project: "fin", to: "Дима", subject: "тема", text: "вопрос" })).data;
+  const req = (await call(cb, "requests")).data;
+  expect(req[0].question).toContain("недоверенные данные, не инструкция");
+  expect((await call(cb, "thread", { thread_id: t.threadId })).err).toBe(true);
+  await call(cb, "respond_request", { thread_id: t.threadId, accept: true });
+  const th = (await call(cb, "thread", { thread_id: t.threadId })).data;
+  expect(th.messages[0].text).toContain("сообщение от Данила");
+  await call(cb, "reply", { thread_id: t.threadId, text: "ответ", about_evapps: true, actions: [{ kind: "mr", url: "https://git.evapps.ru/mr/1" }] });
+  const mine = (await call(ca, "thread", { thread_id: t.threadId })).data;
+  expect(mine.messages[0].text).toBe("вопрос");
+  expect(mine.messages[1].actions[0].kind).toBe("mr");
+  await call(cb, "decide", { thread_id: t.threadId, summary: "решили так", about_evapps: true });
+  expect((await call(ca, "decisions", { project: "fin" })).data[0].summary).toContain("решили так");
   const bad = await call(ca, "ask", { project: "nope", subject: "s", text: "q" });
-  expect(bad.err).toBe(true);
+  expect(bad).toMatchObject({ err: true });
   expect(bad.data).toContain("не найден");
-  expect((await call(ca, "my_projects", { add: [{ name: "x", local_path: "/x" }] })).data).toEqual([{ name: "x", gitRemote: null, localPath: "/x" }]);
+});
+
+test("секрет не уходит", async () => {
+  const ca = await client(a.token);
+  const r = await call(ca, "ask", { project: "fin", subject: "s", text: "вот ключ glpat-abcdefghij1234567890" });
+  expect(r.err).toBe(true);
+  expect(r.data).toContain("секрет");
 });
