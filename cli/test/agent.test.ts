@@ -70,6 +70,17 @@ test("ошибка claude → finished ok:false с текстом", async () => 
   expect(hub.got.find((m) => m.type === "finished")).toMatchObject({ jobId: 6, ok: false, error: expect.stringContaining("boom") });
 });
 
+test("причина ошибки — из основного вывода claude, а не шум хуков; подсказка про вход", async () => {
+  const { hub } = start({ FAKE_MODE: "auth" });
+  await until(() => hub.got.some((m) => m.type === "hello"));
+  hub.send({ type: "job", jobId: 12, threadId: 1, project: null });
+  await until(() => hub.got.some((m) => m.type === "finished"));
+  const f = hub.got.find((m) => m.type === "finished");
+  expect(f.error).toContain("Failed to authenticate");
+  expect(f.error).toContain("claude /login");
+  expect(f.error).not.toContain("Cannot find module");
+});
+
 test("таймаут → finished ok:false, процесс убит", async () => {
   const { hub } = start({ FAKE_MODE: "hang" }, 300);
   await until(() => hub.got.some((m) => m.type === "hello"));

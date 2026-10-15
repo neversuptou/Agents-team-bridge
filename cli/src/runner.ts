@@ -20,7 +20,15 @@ export function runClaude(a: { cwd: string; prompt: string; settings: object; mc
     }, a.timeoutMs);
     ch.on("close", (code) => {
       clearTimeout(timer);
-      finish(code === 0 ? { ok: true, output: out } : { ok: false, error: (err || out).slice(-500) || `код выхода ${code}`, output: out });
+      finish(code === 0 ? { ok: true, output: out } : { ok: false, error: failureReason(out, err, code), output: out });
     });
   });
+}
+
+// Причина отказа: основной вывод claude важнее stderr (там бывает шум чужих хуков); про вход — с подсказкой
+export function failureReason(out: string, err: string, code: number | null) {
+  const reason = (out.trim() || err.trim()).slice(-500) || `код выхода ${code}`;
+  return /authenticate|not logged in|oauth|\/login/i.test(reason)
+    ? `${reason} — войдите заново: в терминале выполните claude /login (или claude, затем /login)`
+    : reason;
 }

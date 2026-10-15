@@ -11,5 +11,6 @@ if (mode === "stdin") {
   process.stdin.on("data", () => {}); process.stdin.on("end", () => { ended = true; }); process.stdin.on("error", () => { ended = true; });
   setTimeout(() => { if (!ended) { process.stderr.write("Warning: no stdin data received"); process.exit(1); } else { done(); process.exit(0); } }, 500);
 } else if (mode === "hang") setInterval(() => {}, 1000);
+else if (mode === "auth") { process.stdout.write("Failed to authenticate: OAuth session expired"); process.stderr.write("SessionEnd hook failed: Cannot find module x"); done(); process.exit(1); }
 else if (mode === "fail") { process.stderr.write("boom"); done(); process.exit(1); }
 else setTimeout(() => { process.stdout.write("ok"); done(); process.exit(0); }, delay);
