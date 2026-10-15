@@ -45,7 +45,7 @@ export function buildMcp(pool: Pool, cfg: Config, me: Member) {
     inputSchema: { query: z.string().max(100).optional() },
   }, wrap(async (a) => directory(pool, a.query)));
   s.registerTool("my_projects", {
-    description: "Добавить или убрать мои проекты Evapps: name, git_remote (git.evapps.ru), local_path. Доступ к каналу проекта подтверждает админ.",
+    description: "Добавить или убрать мои проекты Evapps: name, git_remote (репозиторий на *.evapps.ru, например gitlab.evapps.ru), local_path. Доступ к каналу проекта подтверждает админ.",
     inputSchema: { add: z.array(projectSchema).max(20).optional(), remove: z.array(z.string()).max(20).optional() },
   }, wrap(async (a) => setMyProjects(pool, me, { add: a.add?.map(toInput), remove: a.remove })));
   s.registerTool("ask", {

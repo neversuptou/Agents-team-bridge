@@ -20,11 +20,11 @@ async function ensureProject(pool: Pool, p: ProjectInput): Promise<number> {
     [name, p.gitRemote ?? null, isOrgRemote(p.gitRemote)])).rows[0].id;
 }
 
-// Проект Evapps — репозиторий на git-хосте компании (TB_ORG_GIT_HOSTS, по умолчанию git.evapps.ru)
-const ORG_HOSTS = (process.env.TB_ORG_GIT_HOSTS ?? "git.evapps.ru").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
+// Проект Evapps — репозиторий на домене компании или его поддоменах (TB_ORG_DOMAINS, по умолчанию evapps.ru)
+const ORG_DOMAINS = (process.env.TB_ORG_DOMAINS ?? "evapps.ru").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean);
 export function isOrgRemote(remote?: string | null) {
   const m = remote?.trim().toLowerCase().match(/^(?:[a-z+]+:\/\/)?(?:[^@\/]+@)?([^:\/]+)[:\/]/);
-  return !!m && ORG_HOSTS.includes(m[1]);
+  return !!m && ORG_DOMAINS.some((d) => m[1] === d || m[1].endsWith("." + d));
 }
 
 // Пометить проект как проект Evapps вручную (например, без git) — только админ

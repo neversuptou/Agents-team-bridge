@@ -6,7 +6,7 @@ create table if not exists projects (id serial primary key, name text not null u
 create table if not exists member_projects (
   member_id int not null references members(id), project_id int not null references projects(id),
   local_path text, primary key (member_id, project_id));
--- переписка разрешена только в проектах Evapps (git на git.evapps.ru или пометка админа)
+-- переписка разрешена только в проектах Evapps (git на *.evapps.ru или пометка админа)
 alter table projects add column if not exists is_evapps boolean not null default false;
 -- доступ к каналу (проекту) подтверждает админ
 alter table member_projects add column if not exists approved boolean not null default false;
@@ -50,9 +50,9 @@ begin raise exception 'audit_log: только добавление'; end $$;
 drop trigger if exists audit_log_no_change on audit_log;
 create trigger audit_log_no_change before update or delete or truncate on audit_log for each statement execute function audit_log_append_only();
 drop table if exists jobs;
--- перенос со старой версии: проекты админов подтверждены, репозитории на git.evapps.ru — проекты Evapps
+-- перенос со старой версии: проекты админов подтверждены, репозитории на *.evapps.ru — проекты Evapps
 update member_projects set approved=true where not approved and member_id in (select id from members where is_admin);
-update projects set is_evapps=true where not is_evapps and git_remote ~* '(^|[@/])git\.evapps\.ru[:/]';
+update projects set is_evapps=true where not is_evapps and git_remote ~* '^([a-z+]+://)?([^@/]+@)?([a-z0-9-]+\.)*evapps\.ru[:/]';
 delete from settings where key='invite_code_hash';
 create index if not exists messages_thread on messages(thread_id, id);
 create index if not exists messages_author_time on messages(author_id, created_at);

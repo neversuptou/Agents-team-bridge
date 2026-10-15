@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, test, expect } from "vitest";
 import { freshDb, addMember } from "./helpers.js";
-import { setMyProjects, myProjects, directory, projectOwners, approveMembership, pendingMemberships, sharesProject } from "../src/projects.js";
+import { setMyProjects, myProjects, directory, projectOwners, approveMembership, pendingMemberships, sharesProject, isOrgRemote } from "../src/projects.js";
 let pool: any, admin: any, dima: any;
 beforeEach(async () => {
   pool = await freshDb();
@@ -30,6 +30,13 @@ test("справочник: поиск по имени и подтверждён
   await approveMembership(pool, admin, dima.id, "fin");
   expect((await directory(pool, "fin")).map((e) => e.shortName)).toEqual(["Дима"]);
   expect((await directory(pool, "дима"))[0]).toEqual({ fullName: "ДИМА", shortName: "Дима", projects: ["fin"] });
+});
+
+test("проект Evapps — репозиторий на домене evapps.ru и его поддоменах, подделки не проходят", () => {
+  for (const r of ["https://gitlab.evapps.ru/mvolkov/fin", "git@gitlab.evapps.ru:mvolkov/fin.git", "ssh://git@git.evapps.ru:2222/x/y.git", "https://evapps.ru/x.git"])
+    expect(isOrgRemote(r), r).toBe(true);
+  for (const r of ["https://github.com/neversuptou/Agents-team-bridge.git", "https://gitlab.evapps.ru.evil.com/x", "https://notevapps.ru/x", "https://evil.com/gitlab.evapps.ru/x", undefined, ""])
+    expect(isOrgRemote(r), String(r)).toBe(false);
 });
 
 test("неизвестный проект", async () => {
