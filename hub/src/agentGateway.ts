@@ -8,7 +8,7 @@ import { nextJobFor, finishJob, requeueRunning, expireStale } from "./jobs.js";
 /*
   Подключения ответчиков (WebSocket /agent). Протокол JSON:
   клиент → {type:"hello", token}; сервер → {type:"ready", member} или {type:"error"} + закрытие 4401;
-  сервер → {type:"job", jobId, threadId, project:{name, localPath}|null}; клиент → {type:"finished", jobId, ok, error?};
+  сервер → {type:"job", jobId, threadId, subject, project:{name, localPath}|null}; клиент → {type:"finished", jobId, ok, error?};
   сервер → {type:"ping"} раз в 30 с (заодно проверка, не отозван ли токен).
 */
 export class AgentGateway {
@@ -25,9 +25,10 @@ export class AgentGateway {
     if (!s) return;
     const job = await nextJobFor(this.pool, this.cfg, memberId);
     if (!job) return;
-    const p = (await this.pool.query(`select p.name, mp.local_path from threads t join projects p on p.id=t.project_id
+    const r = (await this.pool.query(`select t.subject, p.name, mp.local_path from threads t left join projects p on p.id=t.project_id
       left join member_projects mp on mp.project_id=p.id and mp.member_id=$2 where t.id=$1`, [job.threadId, memberId])).rows[0];
-    s.ws.send(JSON.stringify({ type: "job", jobId: job.jobId, threadId: job.threadId, project: p ? { name: p.name, localPath: p.local_path } : null }));
+    s.ws.send(JSON.stringify({ type: "job", jobId: job.jobId, threadId: job.threadId, subject: r?.subject,
+      project: r?.name ? { name: r.name, localPath: r.local_path } : null }));
   }
 
   // Раз в 30 с: таймауты заданий, отозванные токены, ping, раздача ожидающих заданий

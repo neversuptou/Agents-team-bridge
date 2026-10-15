@@ -4,7 +4,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { readConfig, writeConfig } from "./config.js";
+import { readConfig, writeConfig, configDir } from "./config.js";
+import { Agent } from "./agent.js";
 import { applyMcp, installHook } from "./setup.js";
 import { autostartSpec } from "./autostart.js";
 import { hubClient, formatDigest } from "./hubClient.js";
@@ -53,5 +54,17 @@ program.command("status").description("Настройки и профиль").ac
   console.log(`Хаб: ${cfg.hub}\nТокен: ${cfg.token ? "есть" : "нет — зарегистрируйтесь через Claude"}`);
   if (cfg.token) console.log(JSON.stringify(await hubClient(cfg).get("/api/me"), null, 2));
 });
+
+program.command("agent").description("Ответчик: отвечает в TeamBridge от вашего имени (запускается автоматически при входе)")
+  .action(async () => {
+    // до регистрации токена нет — ждём, проверяя конфиг раз в минуту
+    let cfg = readConfig();
+    while (!cfg?.token) {
+      console.log("Ответчик ждёт регистрации (нет токена в ~/.teambridge/config.json)…");
+      await new Promise((r) => setTimeout(r, 60_000));
+      cfg = readConfig();
+    }
+    new Agent(cfg, { root: configDir() }).start();
+  });
 
 program.parseAsync().catch((e) => { console.error(e.message); process.exit(1); });

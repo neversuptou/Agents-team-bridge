@@ -26,7 +26,7 @@ test("ответчик получает задание, онлайн-стату�
   expect(app.gateway.online().has(dima.member.id)).toBe(true);
   const { threadId } = await app.services.ask(me.member, { to: "д", subject: "s", text: "q" });
   await until(() => msgs.some((m) => m.type === "job"));
-  const job = msgs.find((m) => m.type === "job"); expect(job.threadId).toBe(threadId); expect(job.project).toBeNull();
+  const job = msgs.find((m) => m.type === "job"); expect(job.threadId).toBe(threadId); expect(job.project).toBeNull(); expect(job.subject).toBe("s");
   ws.send(JSON.stringify({ type: "finished", jobId: job.jobId, ok: true }));
   await until(async () => (await jobStatus()) === "done");
   expect(await jobStatus()).toBe("done");
