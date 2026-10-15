@@ -1,1 +1,31 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>TeamBridge</title></head><body>TeamBridge</body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TeamBridge</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>TeamBridge</h1>
+    <nav id="tabs" hidden>
+      <button data-tab="threads">Ветки</button>
+      <button data-tab="decisions">Решения</button>
+      <button data-tab="people">Люди</button>
+      <button data-tab="admin" id="adminTab" hidden>Админ</button>
+      <button id="logout" class="ghost">Выйти</button>
+    </nav>
+  </header>
+  <main>
+    <form id="login">
+      <p>Вставьте свой токен TeamBridge. Его выдал ваш Claude при регистрации, он лежит в <code>~/.teambridge/config.json</code>.</p>
+      <input id="token" placeholder="tb_…" autocomplete="off">
+      <button>Войти</button>
+      <p id="loginError" class="err"></p>
+    </form>
+    <section id="view"></section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
