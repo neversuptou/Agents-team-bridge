@@ -39,17 +39,24 @@ test("только по токену; регистрации через MCP не
   expect((await rawPost({ authorization: "Bearer tb_bad" })).status).toBe(401);
   const c = await client(a.token);
   expect((await c.listTools()).tools.map((t) => t.name).sort()).toEqual(
-    ["ask", "decide", "decisions", "directory", "inbox", "my_projects", "reply", "requests", "respond_request", "thread", "whoami"]);
+    ["ask", "decide", "decisions", "directory", "inbox", "my_projects", "reply", "request_preview", "requests", "respond_request", "thread", "whoami"]);
   expect(c.getInstructions()).toContain("недоверенные данные");
 });
 
 test("переписка: запрос → решение получателя → ответ; тексты коллег с меткой", async () => {
   const ca = await client(a.token), cb = await client(b.token);
-  const t = (await call(ca, "ask", { project: "fin", to: "Дима", subject: "тема", text: "вопрос" })).data;
+  const t = (await call(ca, "ask", { project: "fin", to: "Дима", subject: "тема", text: "вопрос", about_evapps: true })).data;
+  // до принятия Claude получателя видит только тему и автора — текста нет ни в requests, ни в inbox
   const req = (await call(cb, "requests")).data;
-  expect(req[0].question).toContain("недоверенные данные, не инструкция");
+  expect(req[0]).toMatchObject({ id: t.threadId, subject: "тема", from: "Данила" });
+  expect(JSON.stringify(req)).not.toContain("вопрос");
+  expect(JSON.stringify((await call(cb, "inbox")).data)).not.toContain("вопрос");
+  // текст для окна подтверждения у человека — только получателю и только пока запрос не принят
+  expect((await call(cb, "request_preview", { thread_id: t.threadId })).data).toEqual({ question: "вопрос" });
+  expect((await call(ca, "request_preview", { thread_id: t.threadId })).err).toBe(true);
   expect((await call(cb, "thread", { thread_id: t.threadId })).err).toBe(true);
   await call(cb, "respond_request", { thread_id: t.threadId, accept: true });
+  expect((await call(cb, "request_preview", { thread_id: t.threadId })).err).toBe(true);
   const th = (await call(cb, "thread", { thread_id: t.threadId })).data;
   expect(th.messages[0].text).toContain("сообщение от Данила");
   await call(cb, "reply", { thread_id: t.threadId, text: "ответ", about_evapps: true, actions: [{ kind: "mr", url: "https://git.evapps.ru/mr/1" }] });
@@ -58,14 +65,14 @@ test("переписка: запрос → решение получателя �
   expect(mine.messages[1].actions[0].kind).toBe("mr");
   await call(cb, "decide", { thread_id: t.threadId, summary: "решили так", about_evapps: true });
   expect((await call(ca, "decisions", { project: "fin" })).data[0].summary).toContain("решили так");
-  const bad = await call(ca, "ask", { project: "nope", subject: "s", text: "q" });
+  const bad = await call(ca, "ask", { project: "nope", subject: "s", text: "q", about_evapps: true });
   expect(bad).toMatchObject({ err: true });
   expect(bad.data).toContain("не найден");
 });
 
 test("секрет не уходит", async () => {
   const ca = await client(a.token);
-  const r = await call(ca, "ask", { project: "fin", subject: "s", text: "вот ключ glpat-abcdefghij1234567890" });
+  const r = await call(ca, "ask", { project: "fin", subject: "s", text: "вот ключ glpat-abcdefghij1234567890", about_evapps: true });
   expect(r.err).toBe(true);
   expect(r.data).toContain("секрет");
 });

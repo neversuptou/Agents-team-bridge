@@ -12,8 +12,8 @@ async function ensureProject(pool: Pool, p: ProjectInput): Promise<number> {
   if (!name || name.length > 80) throw new HubError("invalid_project", "Имя проекта — от 1 до 80 символов");
   const found = await pool.query("select id from projects where lower(name)=lower($1)", [name]);
   if (found.rows[0]) {
-    if (p.gitRemote) await pool.query("update projects set git_remote=coalesce(git_remote,$2), is_evapps=is_evapps or $3 where id=$1",
-      [found.rows[0].id, p.gitRemote, isOrgRemote(p.gitRemote)]);
+    // у существующего проекта пометку Evapps меняет только админ (markEvapps): remote ничем не проверяется
+    if (p.gitRemote) await pool.query("update projects set git_remote=coalesce(git_remote,$2) where id=$1", [found.rows[0].id, p.gitRemote]);
     return found.rows[0].id;
   }
   return (await pool.query("insert into projects(name,git_remote,is_evapps) values($1,$2,$3) returning id",

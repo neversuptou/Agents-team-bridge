@@ -1,3 +1,5 @@
+> **УСТАРЕЛО (v0.1).** Документ описывает первую версию: автономный ответчик (`claude -p`, push в `agent/*`), HTTP, хук SessionStart, автозапуск, WebSocket. В v0.2 от этого отказались по чек-листу безопасности: клиент — только MCP уровня проекта, всё исходящее подтверждает человек, HTTPS, каналы проектов Evapps. Актуальное описание — README.md. Не реализуйте по этому документу.
+
 # TeamBridge Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

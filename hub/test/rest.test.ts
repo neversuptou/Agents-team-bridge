@@ -67,6 +67,16 @@ test("приглашение: ссылка с фрагментом, однора
   await expect(register(pool, testConfig, { invite: r.invite, shortName: "Иван2" })).rejects.toMatchObject({ code: "invalid_invite" });
 });
 
+test("админ видит приглашения и отзывает неиспользованное", async () => {
+  const r = await (await post("/api/admin/invites", admin.token, { fullName: "Пётр" })).json();
+  const list = await (await get("/api/admin/invites", admin.token)).json();
+  expect(list[0]).toMatchObject({ id: r.id, fullName: "Пётр", state: "active" });
+  expect(JSON.stringify(list)).not.toContain("tbi_");
+  expect((await post(`/api/admin/invites/${r.id}/revoke`, user.token)).status).toBe(403);
+  expect((await post(`/api/admin/invites/${r.id}/revoke`, admin.token)).status).toBe(200);
+  await expect(register(pool, testConfig, { invite: r.invite, shortName: "п" })).rejects.toMatchObject({ code: "invalid_invite" });
+});
+
 test("отзыв: админ — участника, участник — сам себя", async () => {
   expect((await post("/api/admin/revoke", admin.token, { memberId: admin.member.id })).status).toBe(403);
   expect((await post("/api/admin/revoke", admin.token, { memberId: "x" })).status).toBe(400);

@@ -16,7 +16,26 @@ async function insertInvite(pool: Pool, cfg: Config, a: { fullName: string; isAd
     values($1,$2,$3,$4, now() + make_interval(hours => $5)) returning id, expires_at`,
     [hashSecret(cfg.salt, invite), a.fullName, a.isAdmin, a.createdBy, a.ttlHours ?? cfg.inviteTtlHours]);
   await audit(pool, a.createdBy, "invite.create", `invite:${r.rows[0].id}`, { fullName: a.fullName, isAdmin: a.isAdmin });
-  return { invite, expiresAt: r.rows[0].expires_at as Date };
+  return { invite, id: r.rows[0].id as number, expiresAt: r.rows[0].expires_at as Date };
+}
+
+// Приглашения для админки: кому, до какого срока и в каком состоянии (сами ссылки не хранятся)
+export async function listInvites(pool: Pool) {
+  const r = await pool.query(`select i.id, i.full_name, i.created_at, i.expires_at, i.used_at, i.revoked_at, m.short_name used_by
+    from invites i left join members m on m.id=i.used_by order by i.id desc limit 100`);
+  return r.rows.map((x) => ({
+    id: x.id as number, fullName: x.full_name as string, createdAt: x.created_at, expiresAt: x.expires_at, usedBy: x.used_by as string | null,
+    state: x.used_at ? "used" : x.revoked_at ? "revoked" : new Date(x.expires_at) <= new Date() ? "expired" : "active",
+  }));
+}
+
+// Отозвать ещё не использованное приглашение (например, ссылка попала не тому)
+export async function revokeInvite(pool: Pool, by: Member, inviteId: number) {
+  if (!by.isAdmin) throw new HubError("forbidden", "Только админ");
+  await requireAdmin(pool, by.id);
+  const r = await pool.query("update invites set revoked_at=now() where id=$1 and used_at is null and revoked_at is null", [inviteId]);
+  if (!r.rowCount) throw new HubError("unknown_invite", "Нет такого неиспользованного приглашения");
+  await audit(pool, by.id, "invite.revoke", `invite:${inviteId}`);
 }
 
 // Стартовое приглашение первого админа — только пока в хабе нет ни одного участника
@@ -40,7 +59,7 @@ export async function register(pool: Pool, cfg: Config, a: { invite: string; sho
   const token = newToken();
   return withTx(pool, async (c) => {
     // приглашение гасится в той же транзакции: второй раз им не воспользоваться
-    const inv = (await c.query(`select * from invites where token_hash=$1 and used_at is null and expires_at > now() for update`,
+    const inv = (await c.query(`select * from invites where token_hash=$1 and used_at is null and revoked_at is null and expires_at > now() for update`,
       [hashSecret(cfg.salt, a.invite ?? "")])).rows[0];
     if (!inv) throw new HubError("invalid_invite", "Приглашение недействительно: неверное, уже использовано или истекло");
     const taken = await c.query("select 1 from members where lower(short_name)=lower($1)", [shortName]);
@@ -51,6 +70,10 @@ export async function register(pool: Pool, cfg: Config, a: { invite: string; sho
     await c.query("update invites set used_at=now(), used_by=$2 where id=$1", [inv.id, r.rows[0].id]);
     await audit(c, r.rows[0].id, "member.register", `member:${r.rows[0].id}`, { invite: inv.id });
     return { member: toMember(r.rows[0]), token };
+  }).catch((e) => {
+    // одновременная регистрация того же имени в другом регистре — уникальный индекс lower(short_name)
+    if (e?.code === "23505") throw new HubError("short_name_taken", `Имя «${shortName}» уже занято`);
+    throw e;
   });
 }
 

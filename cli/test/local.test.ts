@@ -2,6 +2,7 @@ import { test, expect } from "vitest";
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { readConfig, writeConfig, configDir } from "../src/config.js";
 import { connectProject, disconnectProject } from "../src/connect.js";
 
@@ -28,24 +29,65 @@ test("TEAMBRIDGE_HOME переопределяет папку конфига", (
   try { expect(configDir()).toBe("/tmp/tb-x"); } finally { delete process.env.TEAMBRIDGE_HOME; }
 });
 
-test("подключение к проекту: только .mcp.json папки, чужие серверы сохраняются, в git не попадает", () => {
+const HUB = "https://10.10.140.2:8120";
+const gitRepo = () => {
   const dir = mkdtempSync(join(tmpdir(), "tb-proj-"));
-  mkdirSync(join(dir, ".git", "info"), { recursive: true });
+  git(dir, "init", "-q");
+  git(dir, "config", "user.email", "t@t"); git(dir, "config", "user.name", "t");
+  return dir;
+};
+const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+const settings = (dir: string) => JSON.parse(readFileSync(join(dir, ".claude", "settings.local.json"), "utf8"));
+
+test("подключение к проекту: только .mcp.json папки, чужие серверы сохраняются, в git не попадает", () => {
+  const dir = gitRepo();
   writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { other: { command: "x" } } }));
-  connectProject(dir, self);
-  connectProject(dir, self);
+  connectProject(dir, self, HUB);
+  connectProject(dir, self, HUB);
   const m = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
   expect(m.mcpServers.other).toEqual({ command: "x" });
   expect(m.mcpServers.teambridge).toEqual({ type: "stdio", command: self.node, args: [self.script, "mcp"] });
-  const exclude = readFileSync(join(dir, ".git", "info", "exclude"), "utf8");
+  expect(git(dir, "status", "--porcelain", "--", ".mcp.json")).toBe("");
+  const exclude = readFileSync(join(dir, git(dir, "rev-parse", "--git-path", "info/exclude")), "utf8");
   expect(exclude.match(/^\.mcp\.json$/gm)).toHaveLength(1);
-  disconnectProject(dir);
+  disconnectProject(dir, HUB);
   expect(JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8")).mcpServers).toEqual({ other: { command: "x" } });
+});
+
+test("в git worktree исключение пишется в общий git (там .git — файл)", () => {
+  const main = gitRepo();
+  writeFileSync(join(main, "a.txt"), "a"); git(main, "add", "."); git(main, "commit", "-qm", "a");
+  const wt = join(mkdtempSync(join(tmpdir(), "tb-wt-")), "wt");
+  git(main, "worktree", "add", "-q", wt);
+  connectProject(wt, self, HUB);
+  expect(git(wt, "status", "--porcelain", "--", ".mcp.json")).toBe("");
+});
+
+test(".mcp.json уже в git — не трогаем: личный путь к node ушёл бы в репозиторий", () => {
+  const dir = gitRepo();
+  writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: {} }));
+  git(dir, "add", ".mcp.json"); git(dir, "commit", "-qm", "mcp");
+  expect(() => connectProject(dir, self, HUB)).toThrow(/в git/);
+  expect(JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"))).toEqual({ mcpServers: {} });
+});
+
+test("Claude в проекте запрещено читать ~/.teambridge и ходить к хабу мимо клиента; чужие правила сохраняются", () => {
+  const dir = gitRepo();
+  mkdirSync(join(dir, ".claude"));
+  writeFileSync(join(dir, ".claude", "settings.local.json"), JSON.stringify({ permissions: { allow: ["Bash(npm test:*)"], deny: ["Bash(rm:*)"] } }));
+  connectProject(dir, self, HUB);
+  connectProject(dir, self, HUB);
+  const s = settings(dir);
+  expect(s.permissions.allow).toEqual(["Bash(npm test:*)"]);
+  expect(s.permissions.deny).toEqual(expect.arrayContaining(["Bash(rm:*)", "Read(~/.teambridge/**)", "Edit(~/.teambridge/**)", "Bash(*.teambridge*)", "Bash(*10.10.140.2*)", "WebFetch(domain:10.10.140.2)"]));
+  expect(new Set(s.permissions.deny).size).toBe(s.permissions.deny.length);
+  disconnectProject(dir, HUB);
+  expect(settings(dir).permissions.deny).toEqual(["Bash(rm:*)"]);
 });
 
 test("отключение удаляет .mcp.json, если там был только TeamBridge", () => {
   const dir = mkdtempSync(join(tmpdir(), "tb-proj-"));
-  connectProject(dir, self);
-  disconnectProject(dir);
+  connectProject(dir, self, HUB);
+  disconnectProject(dir, HUB);
   expect(existsSync(join(dir, ".mcp.json"))).toBe(false);
 });

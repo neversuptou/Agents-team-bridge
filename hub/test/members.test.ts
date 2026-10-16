@@ -1,7 +1,25 @@
 import { beforeEach, afterEach, test, expect } from "vitest";
 import { freshDb, testConfig as cfg, addMember } from "./helpers.js";
-import { createInvite, register, authenticate, revoke, bootstrapInvite } from "../src/members.js";
+import { createInvite, register, authenticate, revoke, bootstrapInvite, listInvites, revokeInvite } from "../src/members.js";
 let pool: Awaited<ReturnType<typeof freshDb>>;
+
+test("одновременная регистрация имён, отличающихся регистром, — понятная ошибка, а не сбой", async () => {
+  const a = await addMember(pool, "а");
+  const [i1, i2] = [await createInvite(pool, cfg, a.member.id, { fullName: "Б" }), await createInvite(pool, cfg, a.member.id, { fullName: "В" })];
+  const res = await Promise.allSettled([register(pool, cfg, { invite: i1.invite, shortName: "Дима" }), register(pool, cfg, { invite: i2.invite, shortName: "дима" })]);
+  expect(res.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect((res.find((r) => r.status === "rejected") as PromiseRejectedResult).reason).toMatchObject({ code: "short_name_taken" });
+});
+
+test("админ видит приглашения и может отозвать неиспользованное", async () => {
+  const a = await addMember(pool, "а");
+  const { invite, id } = await createInvite(pool, cfg, a.member.id, { fullName: "Пётр" });
+  expect((await listInvites(pool)).map((x) => [x.id, x.fullName, x.state])).toContainEqual([id, "Пётр", "active"]);
+  await expect(revokeInvite(pool, { ...a.member, isAdmin: false }, id)).rejects.toMatchObject({ code: "forbidden" });
+  await revokeInvite(pool, a.member, id);
+  expect((await listInvites(pool)).find((x) => x.id === id)?.state).toBe("revoked");
+  await expect(register(pool, cfg, { invite, shortName: "п" })).rejects.toMatchObject({ code: "invalid_invite" });
+});
 beforeEach(async () => { pool = await freshDb(); });
 afterEach(async () => { await pool.end(); });
 

@@ -20,6 +20,10 @@ beforeEach(async () => {
     s.registerTool("whoami", { inputSchema: {} }, async () => ({ content: [{ type: "text", text: "я" }] }));
     s.registerTool("reply", { inputSchema: { thread_id: z.number(), text: z.string(), about_evapps: z.boolean() } },
       async (a) => { received.push(a); return { content: [{ type: "text", text: "ok" }] }; });
+    s.registerTool("request_preview", { inputSchema: { thread_id: z.number() } },
+      async () => ({ content: [{ type: "text", text: JSON.stringify({ question: "почему падает тест дат?" }) }] }));
+    s.registerTool("respond_request", { inputSchema: { thread_id: z.number(), accept: z.boolean() } },
+      async (a) => { received.push(a); return { content: [{ type: "text", text: "ok" }] }; });
     const t = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await s.connect(t); await t.handleRequest(req, res, body);
   });
@@ -28,18 +32,25 @@ beforeEach(async () => {
 });
 afterEach(() => new Promise((r) => http.close(r)));
 
+let shown: string[] = [];
 async function claude(answers: boolean[] | null) {
+  shown = [];
   const proxy = await createProxy({ hub, token: "tb_test" });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const c = new Client({ name: "claude", version: "1" }, { capabilities: answers ? { elicitation: {} } : {} });
-  if (answers) c.setRequestHandler(ElicitRequestSchema, async () => (answers.shift() ? { action: "accept", content: { confirm: true } } : { action: "decline" }));
+  if (answers) c.setRequestHandler(ElicitRequestSchema, async (r) => {
+    shown.push(String(r.params.message));
+    return answers.shift() ? { action: "accept", content: { confirm: true } } : { action: "decline" };
+  });
   await proxy.connect(b); await c.connect(a);
   return c;
 }
 
-test("инструменты и правила хаба видны Claude; токен уходит только в хаб", async () => {
+test("инструменты и правила хаба видны Claude (кроме служебного); токен уходит только в хаб", async () => {
   const c = await claude([]);
-  expect((await c.listTools()).tools.map((t) => t.name).sort()).toEqual(["reply", "whoami"]);
+  expect((await c.listTools()).tools.map((t) => t.name).sort()).toEqual(["reply", "respond_request", "whoami"]);
+  const direct: any = await c.callTool({ name: "request_preview", arguments: { thread_id: 3 } });
+  expect(direct.isError).toBe(true);
   expect(c.getInstructions()).toBe("правила хаба");
   expect(auth.every((h) => h === "Bearer tb_test")).toBe(true);
 });
@@ -51,6 +62,13 @@ test("отправка — только после подтверждения ч
   expect(received).toEqual([]);
   await c.callTool({ name: "reply", arguments: { thread_id: 1, text: "ответ", about_evapps: true } });
   expect(received).toEqual([{ thread_id: 1, text: "ответ", about_evapps: true }]);
+});
+
+test("окно «Принять запрос?» показывает человеку текст вопроса", async () => {
+  const c = await claude([true]);
+  await c.callTool({ name: "respond_request", arguments: { thread_id: 3, accept: true } });
+  expect(shown[0]).toContain("почему падает тест дат?");
+  expect(received).toEqual([{ thread_id: 3, accept: true }]);
 });
 
 test("без поддержки окна подтверждения ничего не отправляется, чтение работает", async () => {

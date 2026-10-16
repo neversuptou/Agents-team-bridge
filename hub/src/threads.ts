@@ -63,7 +63,12 @@ export async function ask(pool: Pool, cfg: Config, from: Member, a: { to?: strin
   if (!o.ownerIds.includes(from.id)) throw new HubError("forbidden", `Вы не участник канала «${o.name}»: добавьте проект через my_projects и дождитесь подтверждения админа`);
   let recipient: number;
   if (a.to) {
-    const m = (await pool.query("select id, short_name from members where revoked_at is null and (lower(short_name)=lower($1) or lower(full_name)=lower($1))", [a.to.trim()])).rows[0];
+    // сначала точное короткое имя (оно уникально), иначе полное — если таких несколько, просим уточнить
+    const byShort = (await pool.query("select id, short_name from members where revoked_at is null and lower(short_name)=lower($1)", [a.to.trim()])).rows;
+    const found = byShort.length ? byShort
+      : (await pool.query("select id, short_name from members where revoked_at is null and lower(full_name)=lower($1)", [a.to.trim()])).rows;
+    if (found.length > 1) throw new HubError("ambiguous_member", `Участников «${a.to}» несколько: укажите короткое имя (${found.map((x) => x.short_name).join(", ")})`);
+    const m = found[0];
     if (!m) throw new HubError("unknown_member", `Нет участника «${a.to}»`);
     if (m.id === from.id) throw new HubError("self_ask", "Нельзя спросить самого себя");
     if (!o.ownerIds.includes(m.id)) throw new HubError("not_owner", `${m.short_name} не участник канала «${o.name}»`);
@@ -114,6 +119,13 @@ export async function pendingRequests(pool: Pool, me: Member) {
   return r.rows.map((x) => ({ id: x.id as number, subject: x.subject as string, project: x.project as string, from: x.from as string, question: x.question as string }));
 }
 
+// Текст ещё не принятого запроса — только получателю, для окна подтверждения у человека (не для Claude)
+export async function requestQuestion(pool: Pool, me: Member, threadId: number) {
+  const r = (await pendingRequests(pool, me)).find((x) => x.id === threadId);
+  if (!r) throw new HubError("forbidden", "Нет такого входящего запроса, ждущего решения");
+  return { question: r.question };
+}
+
 // Принять или отклонить запрос — решение человека-получателя
 export async function respond(pool: Pool, me: Member, threadId: number, accept: boolean) {
   const t = (await pool.query("select * from threads where id=$1", [threadId])).rows[0];
@@ -147,6 +159,8 @@ export async function reply(pool: Pool, cfg: Config, from: Member, a: { threadId
 export async function decide(pool: Pool, cfg: Config, from: Member, a: { threadId: number; summary: string; links?: string[] }) {
   const t = await loadThread(pool, from, a.threadId);
   if (t.status === "closed" || t.status === "rejected") throw new HubError("thread_closed", "Ветка уже закрыта");
+  // итог виден всему каналу — пока получатель не принял запрос, записать его нельзя (иначе текст ушёл бы в обход)
+  if (!t.accepted_at) throw new HubError("not_accepted", "Запрос ещё не принят получателем — итог записать нельзя");
   const links = (a.links ?? []).slice(0, 5);
   if (links.some((l) => !/^https?:\/\/\S+$/i.test(l))) throw new HubError("invalid_actions", "Ссылки — только http(s)");
   const { clean: [summary, ...cleanLinks], injection } = await checkContent(pool, cfg, from, [a.summary, ...links], `decide:thread:${a.threadId}`);
@@ -200,7 +214,7 @@ export async function listThreads(pool: Pool, me: Member) {
 export async function inbox(pool: Pool, me: Member) {
   const rows = (await pool.query(`select t.id, t.subject, t.status, count(m.id)::int new_messages, max(m.id) max_id
     from threads t join thread_participants tp on tp.thread_id=t.id and tp.member_id=$1
-    join messages m on m.thread_id=t.id and m.id>tp.last_read_message_id and m.author_id<>$1 and m.state<>'quarantined'
+    join messages m on m.thread_id=t.id and m.id>tp.last_read_message_id and m.author_id<>$1 and m.state='delivered'
     where t.created_by=$1 or t.accepted_at is not null group by t.id order by max(m.id) desc`, [me.id])).rows;
   for (const r of rows) await pool.query("update thread_participants set last_read_message_id=greatest(last_read_message_id,$3) where thread_id=$1 and member_id=$2", [r.id, me.id, r.max_id]);
   const key = `inbox_decision_${me.id}`;
@@ -243,8 +257,12 @@ export async function resolveQuarantine(pool: Pool, admin: Member, messageId: nu
   await requireAdmin(pool, admin.id);
   const r = await pool.query("select id from messages where id=$1 and state='quarantined'", [messageId]);
   if (!r.rowCount) throw new HubError("unknown_message", "Нет такого сообщения в карантине");
-  if (approve) await pool.query("update messages set state='delivered' where id=$1", [messageId]);
-  else await purgeMessage(pool, messageId);
+  if (approve) {
+    const m = (await pool.query("update messages set state='delivered' where id=$1 returning thread_id, author_id", [messageId])).rows[0];
+    // пока сообщение ждало, получатель мог прочитать более поздние — возвращаем его в непрочитанные
+    await pool.query(`update thread_participants set last_read_message_id=least(last_read_message_id, $3)
+      where thread_id=$1 and member_id<>$2`, [m.thread_id, m.author_id, messageId - 1]);
+  } else await purgeMessage(pool, messageId);
   await pool.query("update alerts set resolved_at=now() where message_id=$1 and resolved_at is null", [messageId]);
   await audit(pool, admin.id, approve ? "quarantine.approve" : "quarantine.reject", `message:${messageId}`);
 }
@@ -277,13 +295,15 @@ export async function resolveAlert(pool: Pool, admin: Member, alertId: number) {
   await pool.query("update alerts set resolved_at=now() where id=$1", [alertId]);
 }
 
-// Срок хранения: ветки без активности дольше retentionDays удаляются целиком (журнал аудита остаётся)
+// Срок хранения: переписка веток без активности дольше retentionDays стирается, ветка закрывается;
+// журнал решений (итоги) и журнал аудита остаются
 export async function purgeOld(pool: Pool, cfg: Config) {
   return withTx(pool, async (c) => {
-    const ids = (await c.query("select id from threads where updated_at < now() - make_interval(days => $1)", [cfg.retentionDays])).rows.map((x) => x.id);
+    const ids = (await c.query(`select distinct t.id from threads t join messages m on m.thread_id=t.id
+      where t.updated_at < now() - make_interval(days => $1)`, [cfg.retentionDays])).rows.map((x) => x.id);
     if (ids.length) {
-      for (const tbl of ["decisions", "messages", "thread_participants"]) await c.query(`delete from ${tbl} where thread_id = any($1)`, [ids]);
-      await c.query("delete from threads where id = any($1)", [ids]);
+      await c.query("delete from messages where thread_id = any($1)", [ids]);
+      await c.query("update threads set status='closed' where id = any($1) and status not in ('closed','rejected')", [ids]);
       await audit(c, null, "retention.purge", undefined, { threads: ids.length });
     }
     await c.query("delete from alerts where resolved_at < now() - make_interval(days => $1)", [cfg.retentionDays]);

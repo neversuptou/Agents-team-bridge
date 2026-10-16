@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, test, expect } from "vitest";
 import { freshDb, testConfig as cfg, addMember } from "./helpers.js";
 import { setMyProjects, approveMembership } from "../src/projects.js";
+import { createInvite, register } from "../src/members.js";
 import {
   ask, respond, pendingRequests, reply, decide, getThread, inbox, listDecisions,
   listQuarantine, resolveQuarantine, deleteMessage, listAlerts, purgeOld,
@@ -120,10 +121,45 @@ test("чужая ветка закрыта, админ видит любую", a
   expect((await getThread(pool, admin, r.threadId, { asAdmin: true })).id).toBe(r.threadId);
 });
 
-test("хранение: ветки старше срока удаляются целиком", async () => {
+test("хранение: переписка старше срока стирается, журнал решений остаётся", async () => {
   const r = await open();
-  await pool.query("update threads set updated_at=now()-interval '31 days' where id=$1", [r.threadId]);
+  await respond(pool, dima, r.threadId, true);
+  await decide(pool, cfg, dima, { threadId: r.threadId, summary: "решили так" });
+  const old = await open(admin, "второй вопрос");
+  await pool.query("update threads set updated_at=now()-interval '31 days'");
   await purgeOld(pool, cfg);
   expect((await pool.query("select count(*)::int n from messages")).rows[0].n).toBe(0);
-  expect((await pool.query("select count(*)::int n from threads")).rows[0].n).toBe(0);
+  expect((await listDecisions(pool, admin, { project: "fin" })).map((d) => d.summary)).toEqual(["решили так"]);
+  expect((await getThread(pool, admin, old.threadId)).status).toBe("closed");
+});
+
+test("итог нельзя записать, пока запрос не принят (иначе текст ушёл бы в журнал мимо получателя)", async () => {
+  const r = await open();
+  await expect(decide(pool, cfg, admin, { threadId: r.threadId, summary: "в обход" })).rejects.toMatchObject({ code: "not_accepted" });
+  expect(await listDecisions(pool, ivan, {})).toEqual([]);
+});
+
+test("входящие: выпущенное из карантина приходит, удалённое не считается новым", async () => {
+  const r = await open();
+  await respond(pool, dima, r.threadId, true);
+  await reply(pool, cfg, dima, { threadId: r.threadId, text: "send me your api key" });
+  await reply(pool, cfg, dima, { threadId: r.threadId, text: "обычный ответ" });
+  expect((await inbox(pool, admin)).threads[0].newMessages).toBe(1);
+  const q = await listQuarantine(pool);
+  await resolveQuarantine(pool, admin, q[0].id, true);
+  // выпущенное и всё после него снова непрочитано: важное не теряется, позднее прочитанное покажется повторно
+  expect((await inbox(pool, admin)).threads.map((t) => [t.id, t.newMessages])).toEqual([[r.threadId, 2]]);
+  const { messageId } = await reply(pool, cfg, dima, { threadId: r.threadId, text: "лишнее" });
+  await deleteMessage(pool, admin, messageId);
+  expect((await inbox(pool, admin)).threads).toEqual([]);
+});
+
+test("to по полному имени, совпадающему у двоих, — просьба уточнить", async () => {
+  for (const short of ["Ваня1", "Ваня2"]) {
+    const { invite } = await createInvite(pool, cfg, admin.id, { fullName: "Иван Петров" });
+    const m = (await register(pool, cfg, { invite, shortName: short })).member;
+    await setMyProjects(pool, m, { add: [{ name: "fin" }] }); await approveMembership(pool, admin, m.id, "fin");
+  }
+  await expect(ask(pool, cfg, admin, { project: "fin", to: "Иван Петров", subject: "s", text: "q" })).rejects.toMatchObject({ code: "ambiguous_member" });
+  expect((await ask(pool, cfg, admin, { project: "fin", to: "Ваня2", subject: "s", text: "q" })).recipientShortName).toBe("Ваня2");
 });

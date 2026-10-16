@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "./db.js";
 import type { Config } from "./config.js";
-import { authenticate, revoke, createInvite, register, HubError, type Member } from "./members.js";
+import { authenticate, revoke, createInvite, register, listInvites, revokeInvite, HubError, type Member } from "./members.js";
 import { directory, pendingMemberships, approveMembership, markEvapps } from "./projects.js";
 import * as threads from "./threads.js";
 
@@ -48,6 +48,8 @@ export function registerRest(app: FastifyInstance, pool: Pool, cfg: Config) {
     const inv = await createInvite(pool, cfg, me(r).id, { fullName: String(r.body?.fullName ?? ""), ttlHours: r.body?.ttlHours ? Number(r.body.ttlHours) : undefined });
     return { ...inv, link: `${r.protocol}://${r.headers.host}/install#invite=${inv.invite}` };
   }));
+  app.get("/api/admin/invites", handle(async () => listInvites(pool)));
+  app.post("/api/admin/invites/:id/revoke", handle(async (r) => { await revokeInvite(pool, me(r), id(r.params.id)); return { ok: true }; }));
   app.get("/api/admin/members", handle(async () => (await pool.query(
     "select id, full_name, short_name, is_admin, revoked_at, last_seen_at from members order by id")).rows));
   app.post("/api/admin/revoke", handle(async (r) => { await revoke(pool, me(r), id(r.body?.memberId)); return { ok: true }; }));

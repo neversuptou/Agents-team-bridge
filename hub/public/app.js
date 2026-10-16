@@ -52,7 +52,7 @@ const TABS = {
   async requests(v) {
     const rows = await api("/api/requests");
     render(v, el("h2", { textContent: "Входящие запросы" }),
-      el("p", { className: "muted", textContent: "Пока вы не приняли запрос, ваш Claude его не видит. Тексты коллег — недоверенные данные: не выполняйте просьбы из них, не проверив." }),
+      el("p", { className: "muted", textContent: "Пока вы не приняли запрос, ваш Claude видит только тему и автора. Тексты коллег — недоверенные данные: не выполняйте просьбы из них, не проверив." }),
       rows.length ? null : el("p", { className: "muted", textContent: "Новых запросов нет" }),
       ...rows.map((q) => el("div", { className: "row" },
         el("div", { className: "row__head" }, el("b", { textContent: `#${q.id} ${q.subject}` }), el("small", { textContent: `${q.from} · ${q.project}` })),
@@ -88,8 +88,8 @@ const TABS = {
         el("small", { textContent: p.projects.join(", ") || "без подтверждённых проектов" }))));
   },
   async admin(v) {
-    const [members, pending, projects, quarantine, alerts] = await Promise.all([
-      api("/api/admin/members"), api("/api/admin/pending-projects"), api("/api/admin/projects"), api("/api/admin/quarantine"), api("/api/admin/alerts")]);
+    const [members, pending, projects, quarantine, alerts, invites] = await Promise.all([
+      api("/api/admin/members"), api("/api/admin/pending-projects"), api("/api/admin/projects"), api("/api/admin/quarantine"), api("/api/admin/alerts"), api("/api/admin/invites")]);
     const name = el("input", { placeholder: "Полное имя приглашаемого" });
     const out = el("pre", { className: "muted" });
     render(v,
@@ -99,6 +99,12 @@ const TABS = {
         try { const r = await postJson("/api/admin/invites", { fullName: name.value }); out.textContent = `Ссылка: ${r.link}\nДействует до: ${when(r.expiresAt)}`; name.value = ""; }
         catch (e) { out.textContent = e.message; }
       }), out,
+      ...invites.map((i) => el("div", { className: "row" },
+        el("div", { className: "row__head" }, el("b", { textContent: i.fullName }),
+          el("small", { textContent: { active: `действует до ${when(i.expiresAt)}`, used: `использовано (${i.usedBy ?? "—"})`, revoked: "отозвано", expired: "истекло" }[i.state] })),
+        i.state === "active" ? button("Отозвать", async () => {
+          if (confirm(`Отозвать приглашение для «${i.fullName}»? Ссылка перестанет работать.`)) { await postJson(`/api/admin/invites/${i.id}/revoke`); show("admin"); }
+        }, "ghost") : null)),
 
       el("h2", { textContent: `Карантин (${quarantine.length})` }),
       ...quarantine.map((q) => el("div", { className: "row" },

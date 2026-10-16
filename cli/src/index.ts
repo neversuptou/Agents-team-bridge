@@ -42,14 +42,14 @@ program.command("connect [dir]").description("Подключить TeamBridge к
   .action((dir?: string) => {
     const cfg = needToken();
     const path = resolve(dir ?? ".");
-    connectProject(path, selfCmd());
+    connectProject(path, selfCmd(), cfg.hub);
     writeConfig({ ...cfg, projects: [...new Set([...(cfg.projects ?? []), path])] });
     console.log(`Подключено: ${path}\nОткройте Claude Code в этой папке и одобрите сервер teambridge. Каждую отправку коллегам вы подтверждаете в отдельном окне.`);
   });
 
 program.command("disconnect [dir]").description("Отключить TeamBridge от папки проекта").action((dir?: string) => {
   const path = resolve(dir ?? ".");
-  disconnectProject(path);
+  disconnectProject(path, readConfig()?.hub);
   const cfg = readConfig();
   if (cfg) writeConfig({ ...cfg, projects: (cfg.projects ?? []).filter((p) => p !== path) });
   console.log(`Отключено: ${path}`);
@@ -78,7 +78,7 @@ program.command("uninstall").description("Отозвать свой токен, 
     try { await hubClient(cfg).post("/api/me/revoke"); console.log("Токен отозван на хабе."); }
     catch (e: any) { console.log(`Не удалось отозвать токен (${e.message}) — попросите админа отозвать его в веб-ленте.`); }
   }
-  for (const p of cfg?.projects ?? []) { disconnectProject(p); console.log(`Отключено: ${p}`); }
+  for (const p of cfg?.projects ?? []) { disconnectProject(p, cfg?.hub); console.log(`Отключено: ${p}`); }
   rmSync(configDir(), { recursive: true, force: true });
   console.log("Настройки удалены. Осталось удалить программу: npm rm -g teambridge");
 });

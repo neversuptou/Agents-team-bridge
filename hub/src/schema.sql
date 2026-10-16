@@ -50,9 +50,18 @@ begin raise exception 'audit_log: только добавление'; end $$;
 drop trigger if exists audit_log_no_change on audit_log;
 create trigger audit_log_no_change before update or delete or truncate on audit_log for each statement execute function audit_log_append_only();
 drop table if exists jobs;
--- перенос со старой версии: проекты админов подтверждены, репозитории на *.evapps.ru — проекты Evapps
-update member_projects set approved=true where not approved and member_id in (select id from members where is_admin);
-update projects set is_evapps=true where not is_evapps and git_remote ~* '^([a-z+]+://)?([^@/]+@)?([a-z0-9-]+\.)*evapps\.ru[:/]';
+-- перенос со старой версии — один раз (иначе каждый перезапуск возвращал бы пометку Evapps, снятую админом)
+do $$ begin
+  if not exists (select 1 from settings where key='migration_v2_evapps') then
+    update member_projects set approved=true where not approved and member_id in (select id from members where is_admin);
+    update projects set is_evapps=true where not is_evapps and git_remote ~* '^([a-z+]+://)?([^@/]+@)?([a-z0-9-]+\.)*evapps\.ru[:/]';
+    insert into settings(key,value) values('migration_v2_evapps','done');
+  end if;
+end $$;
 delete from settings where key='invite_code_hash';
+-- приглашение можно отозвать до использования
+alter table invites add column if not exists revoked_at timestamptz;
+-- короткое имя уникально без учёта регистра (две одновременные регистрации «Дима» / «дима»)
+create unique index if not exists members_short_name_lower on members (lower(short_name));
 create index if not exists messages_thread on messages(thread_id, id);
 create index if not exists messages_author_time on messages(author_id, created_at);

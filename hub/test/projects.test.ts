@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, test, expect } from "vitest";
 import { freshDb, addMember } from "./helpers.js";
-import { setMyProjects, myProjects, directory, projectOwners, approveMembership, pendingMemberships, sharesProject, isOrgRemote } from "../src/projects.js";
+import { setMyProjects, myProjects, directory, projectOwners, approveMembership, pendingMemberships, sharesProject, isOrgRemote, markEvapps } from "../src/projects.js";
+import { migrate } from "../src/db.js";
 let pool: any, admin: any, dima: any;
 beforeEach(async () => {
   pool = await freshDb();
@@ -37,6 +38,17 @@ test("проект Evapps — репозиторий на домене evapps.ru
     expect(isOrgRemote(r), r).toBe(true);
   for (const r of ["https://github.com/example/project.git", "https://gitlab.evapps.ru.evil.com/x", "https://notevapps.ru/x", "https://evil.com/gitlab.evapps.ru/x", undefined, ""])
     expect(isOrgRemote(r), String(r)).toBe(false);
+});
+
+test("пометку Evapps у существующего проекта участник не ставит, перезапуск не возвращает снятую админом", async () => {
+  await setMyProjects(pool, admin, { add: [{ name: "x" }] });
+  await setMyProjects(pool, dima, { add: [{ name: "x", gitRemote: "https://gitlab.evapps.ru/a/x.git" }] });
+  expect((await projectOwners(pool, "x")).isEvapps).toBe(false);
+  await setMyProjects(pool, admin, { add: [{ name: "y", gitRemote: "https://gitlab.evapps.ru/a/y.git" }] });
+  expect((await projectOwners(pool, "y")).isEvapps).toBe(true);
+  await markEvapps(pool, admin, "y", false);
+  await migrate(pool);
+  expect((await projectOwners(pool, "y")).isEvapps).toBe(false);
 });
 
 test("неизвестный проект", async () => {
