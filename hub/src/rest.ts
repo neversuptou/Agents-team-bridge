@@ -9,11 +9,13 @@ export const bearer = (h?: string) => (h?.startsWith("Bearer ") ? h.slice(7) : u
 
 // REST для веб-ленты; всё под /api — только с токеном, /api/admin — только админу
 export function registerRest(app: FastifyInstance, pool: Pool, cfg: Config) {
+  // проверяем шаблон сработавшего маршрута, а не req.url: роутер декодирует путь, и /%61pi/… попадает в /api/…
   app.addHook("preHandler", async (req: any, reply) => {
-    if (!req.url.startsWith("/api/")) return;
+    const route: string = req.routeOptions?.url ?? "";
+    if (!route.startsWith("/api/")) return;
     const m = await authenticate(pool, cfg, bearer(req.headers.authorization) ?? "");
     if (!m) return reply.code(401).send({ error: "unauthorized" });
-    if (req.url.startsWith("/api/admin/") && !m.isAdmin) return reply.code(403).send({ error: "forbidden", message: "Только админ" });
+    if (route.startsWith("/api/admin/") && !m.isAdmin) return reply.code(403).send({ error: "forbidden", message: "Только админ" });
     req.member = m;
   });
   const me = (req: any) => req.member as Member;

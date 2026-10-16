@@ -31,6 +31,18 @@ test("401 без токена, me с токеном, заголовки безо
   expect(r.headers.get("x-frame-options")).toBe("DENY");
 });
 
+test("закодированный путь не обходит проверку токена и прав админа", async () => {
+  for (const p of ["/%61pi/admin/members", "/ap%69/admin/audit", "/%61pi/members", "/api/%61dmin/alerts", "/API/admin/members"]) {
+    const anon = await get(p);
+    expect([401, 404], p).toContain(anon.status);
+  }
+  for (const p of ["/%61pi/admin/members", "/api/%61dmin/quarantine"]) {
+    const asUser = await get(p, user.token);
+    expect([403, 404], p).toContain(asUser.status);
+  }
+  expect((await get("/%61pi/admin/members", admin.token)).status).toBe(200);
+});
+
 test("входящий запрос принимается человеком в веб-ленте", async () => {
   const { threadId } = await ask(pool, testConfig, admin.member, { project: "fin", to: "б", subject: "тема", text: "q" });
   expect((await (await get("/api/requests", user.token)).json()).map((x: any) => x.id)).toEqual([threadId]);

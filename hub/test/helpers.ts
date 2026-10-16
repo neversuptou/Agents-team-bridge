@@ -1,7 +1,8 @@
 import { createPool, migrate, type Pool } from "../src/db.js";
 import { loadConfig } from "../src/config.js";
 import { createInvite, register, bootstrapInvite } from "../src/members.js";
-export const testConfig = { ...loadConfig({}), salt: "test-salt", maxTurns: 10, maxMessagesPerHour: 30 };
+// база тестов — TB_DATABASE_URL (если задан), остальное — значения по умолчанию
+export const testConfig = { ...loadConfig({ TB_DATABASE_URL: process.env.TB_DATABASE_URL }), salt: "test-salt", maxTurns: 10, maxMessagesPerHour: 30 };
 export async function freshDb(): Promise<Pool> {
   const pool = createPool(testConfig.databaseUrl);
   await pool.query("drop schema public cascade; create schema public;");
