@@ -53,8 +53,9 @@ export function connectProject(dir: string, self: SelfCmd, hub: string) {
   if (excludeRel) {
     const exclude = isAbsolute(excludeRel) ? excludeRel : join(dir, excludeRel);
     mkdirSync(dirname(exclude), { recursive: true });
-    const has = existsSync(exclude) && readFileSync(exclude, "utf8").split(/\r?\n/).includes(".mcp.json");
-    if (!has) appendFileSync(exclude, "\n.mcp.json\n");
+    const lines = existsSync(exclude) ? readFileSync(exclude, "utf8").split(/\r?\n/) : [];
+    const missing = [".mcp.json", ".claude/settings.local.json"].filter((p) => !lines.includes(p));
+    if (missing.length) appendFileSync(exclude, "\n" + missing.join("\n") + "\n");
   }
   writeDenyRules(dir, hub);
 }

@@ -47,7 +47,7 @@ test("подключение к проекту: только .mcp.json папк�
   const m = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
   expect(m.mcpServers.other).toEqual({ command: "x" });
   expect(m.mcpServers.teambridge).toEqual({ type: "stdio", command: self.node, args: [self.script, "mcp"] });
-  expect(git(dir, "status", "--porcelain", "--", ".mcp.json")).toBe("");
+  expect(git(dir, "status", "--porcelain", "--", ".mcp.json", ".claude")).toBe("");
   const exclude = readFileSync(join(dir, git(dir, "rev-parse", "--git-path", "info/exclude")), "utf8");
   expect(exclude.match(/^\.mcp\.json$/gm)).toHaveLength(1);
   disconnectProject(dir, HUB);
